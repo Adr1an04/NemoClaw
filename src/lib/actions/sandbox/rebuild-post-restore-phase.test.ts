@@ -564,7 +564,9 @@ describe("rebuild post-restore phase", () => {
       await expect(runRebuildPostRestorePhase(args)).rejects.toBe(failure);
 
       expect(args.bail).toHaveBeenCalledExactlyOnceWith(
-        "Replacement agent version could not be verified after rebuild.",
+        restoreSucceeded
+          ? "Replacement agent version could not be verified after rebuild."
+          : "State restore remained incomplete after rebuilding 'alpha'.",
       );
       const errors = vi.mocked(console.error).mock.calls.flat().join("\n");
       const logs = vi.mocked(console.log).mock.calls.flat().join("\n");
@@ -602,18 +604,28 @@ describe("rebuild post-restore phase", () => {
         detectionMethod: reason === "probe-failed" ? "unknown" : "unavailable",
         unavailableReason: reason,
       });
+      const failure = new Error("rebuild stopped");
       const args = {
         ...input(),
         restoreSucceeded,
+        bail: vi.fn((): never => {
+          throw failure;
+        }),
         versionCheck: { expectedVersion: "0.20.6" } as never,
       };
-      await runRebuildPostRestorePhase(args);
-      expect(args.bail).toHaveBeenCalledWith(
-        "Replacement agent version could not be verified after rebuild.",
+      await expect(runRebuildPostRestorePhase(args)).rejects.toBe(failure);
+      expect(args.bail).toHaveBeenCalledExactlyOnceWith(
+        restoreSucceeded
+          ? "Replacement agent version could not be verified after rebuild."
+          : "State restore remained incomplete after rebuilding 'alpha'.",
       );
-      expect(vi.mocked(console.error).mock.calls.flat().join("\n")).not.toContain(
-        "gateway restart",
-      );
+      const errors = vi.mocked(console.error).mock.calls.flat().join("\n");
+      expect(errors).not.toContain("gateway restart");
+      expect(
+        errors.includes(
+          "State recovery remains incomplete. Correct the restore error, then run `nemoclaw alpha rebuild` again.",
+        ),
+      ).toBe(!restoreSucceeded);
     },
   );
 

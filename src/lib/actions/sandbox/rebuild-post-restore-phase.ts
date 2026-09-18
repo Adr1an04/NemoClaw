@@ -101,8 +101,12 @@ function printRebuildVersionFailureRecovery(
   input: RebuildPostRestorePhaseInput,
   rebuiltVersion: sandboxVersion.VersionCheckResult,
   mcpBridgeRestoreUnverified: boolean,
-): void {
+  versionFailureMessage: string,
+): string {
   const { sandboxName, backupManifest, targetAgentName, restoreSucceeded } = input;
+  const failureMessage = restoreSucceeded
+    ? versionFailureMessage
+    : `State restore remained incomplete after rebuilding '${sandboxName}'.`;
   if (backupManifest) {
     console.error(`  Backup is preserved at: ${backupManifest.backupPath}`);
   }
@@ -110,7 +114,13 @@ function printRebuildVersionFailureRecovery(
   // Resumed replacements can retain a cron gate without a new restore identity.
   if (targetAgentName === "hermes" && input.preparedBackupRecovery) {
     printHermesCronRestoreRecoveryCommand(sandboxName);
-    return;
+    return failureMessage;
+  }
+  if (!restoreSucceeded) {
+    console.error(
+      `  State recovery remains incomplete. Correct the restore error, then run \`${CLI_NAME} ${sandboxName} rebuild\` again.`,
+    );
+    return failureMessage;
   }
   if (
     targetAgentName === "hermes" &&
@@ -123,6 +133,7 @@ function printRebuildVersionFailureRecovery(
       `  If gateway health is still unverified, run \`${CLI_NAME} ${sandboxName} recover\`.`,
     );
   }
+  return failureMessage;
 }
 
 export function printHermesOperatorConfigRestoreReport(
@@ -408,8 +419,14 @@ export async function runRebuildPostRestorePhase(
         );
       }
       console.error(detail);
-      printRebuildVersionFailureRecovery(input, rebuiltVersion, mcpBridgeRestoreUnverified);
-      bail(bailMessage);
+      bail(
+        printRebuildVersionFailureRecovery(
+          input,
+          rebuiltVersion,
+          mcpBridgeRestoreUnverified,
+          bailMessage,
+        ),
+      );
       return;
     }
     verifiedAgentVersion = rebuiltVersion.sandboxVersion;
