@@ -49,13 +49,6 @@ export {
   runHermesCronRestoreTransaction,
 } from "./rebuild-hermes-post-restore";
 
-/** Probe the recreated runtime instead of accepting its requested version metadata. */
-function probeRebuiltAgentVersion(
-  sandboxName: string,
-): ReturnType<typeof sandboxVersion.checkAgentVersion> {
-  return sandboxVersion.checkAgentVersion(sandboxName, { forceProbe: true });
-}
-
 const OPENCLAW_DOCTOR_TIMEOUT_MS = 5 * 60_000;
 
 export function printHermesCronRestoreRecoveryCommand(
@@ -102,6 +95,34 @@ export interface RebuildPostRestorePhaseInput {
 
 export interface RebuildPostRestoreVerification {
   readonly mutableConfigPermissionsVerified: boolean;
+}
+
+function printRebuildVersionFailureRecovery(
+  input: RebuildPostRestorePhaseInput,
+  rebuiltVersion: sandboxVersion.VersionCheckResult,
+  mcpBridgeRestoreUnverified: boolean,
+): void {
+  const { sandboxName, backupManifest, targetAgentName, restoreSucceeded } = input;
+  if (backupManifest) {
+    console.error(`  Backup is preserved at: ${backupManifest.backupPath}`);
+  }
+  printMcpRestoreRecovery(sandboxName, mcpBridgeRestoreUnverified);
+  if (
+    targetAgentName === "hermes" &&
+    restoreSucceeded &&
+    rebuiltVersion.verificationFailed &&
+    rebuiltVersion.unavailableReason === "probe-failed"
+  ) {
+    // Resumed replacements can retain a cron gate without a new restore identity.
+    if (input.preparedBackupRecovery) {
+      printHermesCronRestoreRecoveryCommand(sandboxName);
+      return;
+    }
+    console.error(`  Run \`${CLI_NAME} ${sandboxName} gateway restart\`.`);
+    console.error(
+      `  If gateway health is still unverified, run \`${CLI_NAME} ${sandboxName} recover\`.`,
+    );
+  }
 }
 
 export function printHermesOperatorConfigRestoreReport(
@@ -358,28 +379,37 @@ export async function runRebuildPostRestorePhase(
     // version. Clear create-time bookkeeping before the forced live probe so a
     // failed probe cannot leave the requested version recorded as observed.
     registry.updateSandbox(sandboxName, { agentVersion: null });
-    const rebuiltVersion = await probeRebuiltAgentVersion(sandboxName);
-    if (
-      rebuiltVersion.verificationFailed ||
-      rebuiltVersion.sandboxVersion !== versionCheck.expectedVersion
-    ) {
+    const rebuiltVersion = await sandboxVersion.checkAgentVersion(sandboxName, {
+      forceProbe: true,
+    });
+    const versionUnverified =
+      rebuiltVersion.verificationFailed || rebuiltVersion.sandboxVersion === null;
+    if (versionUnverified || rebuiltVersion.sandboxVersion !== versionCheck.expectedVersion) {
       // checkAgentVersion caches a successful probe. Do not retain metadata
       // from a replacement that this rebuild rejects.
       registry.updateSandbox(sandboxName, { agentVersion: null });
-      const observed = rebuiltVersion.sandboxVersion ?? "unverified";
-      const detail = `  Replacement agent version did not match the rebuild target (expected ${versionCheck.expectedVersion}, observed ${observed}).`;
+      const detail = versionUnverified
+        ? `  Replacement agent version could not be verified (expected ${versionCheck.expectedVersion}).`
+        : `  Replacement agent version did not match the rebuild target (expected ${versionCheck.expectedVersion}, observed ${rebuiltVersion.sandboxVersion}).`;
+      const bailMessage = versionUnverified
+        ? "Replacement agent version could not be verified after rebuild."
+        : "Replacement agent version did not match the authoritative rebuild target.";
       if (hermesCronRestoreIdentity) {
+        if (hermesGatewayRestoreUnverified) {
+          console.error("  Hermes gateway health was not verified after state restore.");
+        }
         return bailAfterHermesCronRestoreFailure(
           sandboxName,
           backupManifest,
           `${detail} Hermes cron dispatch remains drained.`,
-          "Replacement agent version did not match the authoritative rebuild target.",
+          bailMessage,
           bail,
           mcpBridgeRestoreUnverified ? () => printMcpRestoreRecovery(sandboxName, true) : undefined,
         );
       }
       console.error(detail);
-      bail("Replacement agent version did not match the authoritative rebuild target.");
+      printRebuildVersionFailureRecovery(input, rebuiltVersion, mcpBridgeRestoreUnverified);
+      bail(bailMessage);
       return;
     }
     verifiedAgentVersion = rebuiltVersion.sandboxVersion;
