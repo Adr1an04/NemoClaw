@@ -107,17 +107,17 @@ function printRebuildVersionFailureRecovery(
     console.error(`  Backup is preserved at: ${backupManifest.backupPath}`);
   }
   printMcpRestoreRecovery(sandboxName, mcpBridgeRestoreUnverified);
+  // Resumed replacements can retain a cron gate without a new restore identity.
+  if (targetAgentName === "hermes" && input.preparedBackupRecovery) {
+    printHermesCronRestoreRecoveryCommand(sandboxName);
+    return;
+  }
   if (
     targetAgentName === "hermes" &&
     restoreSucceeded &&
     rebuiltVersion.verificationFailed &&
     rebuiltVersion.unavailableReason === "probe-failed"
   ) {
-    // Resumed replacements can retain a cron gate without a new restore identity.
-    if (input.preparedBackupRecovery) {
-      printHermesCronRestoreRecoveryCommand(sandboxName);
-      return;
-    }
     console.error(`  Run \`${CLI_NAME} ${sandboxName} gateway restart\`.`);
     console.error(
       `  If gateway health is still unverified, run \`${CLI_NAME} ${sandboxName} recover\`.`,
