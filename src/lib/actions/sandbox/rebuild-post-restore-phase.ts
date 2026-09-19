@@ -150,7 +150,6 @@ function printRebuildVersionFailureRecovery(
   }
   if (
     targetAgentName === "hermes" &&
-    restoreSucceeded &&
     rebuiltVersion.verificationFailed &&
     rebuiltVersion.unavailableReason === "probe-failed"
   ) {
