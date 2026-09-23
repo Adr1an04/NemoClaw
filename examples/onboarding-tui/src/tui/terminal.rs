@@ -1,13 +1,18 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-use super::app::{Input, Wizard};
+use super::{
+    app::{Input, Wizard},
+    logo::BrandImage,
+};
 use nemoclaw_authoring::{Capabilities, Draft};
 use nemoclaw_sdk::{CancellationToken, Error};
 use ratatui::{Terminal, TerminalOptions, Viewport, backend::CrosstermBackend, layout::Rect};
 use std::{io, time::Duration};
 
-struct TerminalGuard;
+struct TerminalGuard {
+    brand: Option<BrandImage>,
+}
 
 impl TerminalGuard {
     fn enter() -> io::Result<Self> {
@@ -20,12 +25,15 @@ impl TerminalGuard {
             let _ = crossterm::terminal::disable_raw_mode();
             return Err(error);
         }
-        Ok(Self)
+        Ok(Self { brand: None })
     }
 }
 
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
+        if let Some(brand) = self.brand {
+            let _ = brand.delete(&mut io::stderr());
+        }
         let _ = crossterm::execute!(
             io::stderr(),
             crossterm::terminal::LeaveAlternateScreen,
@@ -40,8 +48,11 @@ pub(crate) fn run(
     draft: Draft,
     cancel: &CancellationToken,
 ) -> Result<Option<Draft>, Box<dyn std::error::Error>> {
-    let _guard = TerminalGuard::enter()?;
+    let mut guard = TerminalGuard::enter()?;
     let area = terminal_area();
+    let brand =
+        BrandImage::detect(area.width).filter(|brand| brand.transmit(&mut io::stderr()).is_ok());
+    guard.brand = brand;
     let mut terminal = Terminal::with_options(
         CrosstermBackend::new(io::stderr()),
         TerminalOptions {
@@ -53,7 +64,7 @@ pub(crate) fn run(
         if cancel.is_cancelled() {
             return Err(Error::Cancelled.into());
         }
-        terminal.draw(|frame| wizard.render(frame))?;
+        terminal.draw(|frame| wizard.render_with_brand(frame, brand))?;
         if wizard.accepted() {
             return Ok(Some(wizard.draft().clone()));
         }

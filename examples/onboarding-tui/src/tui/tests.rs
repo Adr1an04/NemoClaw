@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::app::{Input, Step, Wizard};
+use super::logo::BrandImage;
 use nemoclaw_authoring::{Answers, ApiChoice, Capabilities, Draft, HarnessChoice, Session};
 use ratatui::{Terminal, backend::TestBackend};
 
@@ -127,6 +128,29 @@ fn focused_screen_uses_a_static_texture_inline_step_and_thin_footer_progress() {
     assert!(
         !progress.contains('█'),
         "progress should be half-height\n{rendered}"
+    );
+}
+
+#[test]
+fn compatible_terminal_places_the_nvidia_image_beside_the_wordmark() {
+    let wizard = wizard();
+    let backend = TestBackend::new(120, 30);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let brand = BrandImage::from_id(0x12_34_56);
+    terminal
+        .draw(|frame| wizard.render_with_brand(frame, Some(brand)))
+        .unwrap();
+    let rendered = terminal.backend().to_string();
+
+    assert!(
+        rendered.contains('\u{10eeee}'),
+        "missing image anchors\n{rendered}"
+    );
+    assert!(
+        rendered
+            .lines()
+            .any(|line| line.contains("\u{10eeee}") && line.contains("██╔██╗")),
+        "image should sit beside the wordmark\n{rendered}"
     );
 }
 
