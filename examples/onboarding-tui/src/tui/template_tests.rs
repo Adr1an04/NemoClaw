@@ -109,7 +109,9 @@ fn exercise_templates(rename: bool) {
             "{} lost template settings during loading",
             path.display()
         );
-        let mut wizard = Wizard::new(capabilities, draft);
+        // Template preservation includes the local-Linux Podman preset.
+        // Unsupported-host behavior is exercised separately on every CI host.
+        let mut wizard = Wizard::for_host(capabilities, draft, "linux");
         finish(&mut wizard, path, rename);
         let reviewed = wizard.draft().review().unwrap();
         let output = directory.path().join(format!("example-{index}.yaml"));
