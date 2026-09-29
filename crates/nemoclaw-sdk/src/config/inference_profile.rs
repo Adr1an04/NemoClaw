@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{ObservationError, config::InferenceProviderKind};
-use openshell_sdk::raw::proto;
+use openshell_core::proto;
 
 /// Build the endpoint and credential boundary for a native inference provider.
 pub fn definition(

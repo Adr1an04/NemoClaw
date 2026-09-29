@@ -3,35 +3,6 @@
 use super::*;
 use crate::config::ExplicitPolicy;
 
-fn canonical(policy: &proto::SandboxPolicy) -> Result<String, ObservationError> {
-    let mut policy = policy.clone();
-    if let Some(fs) = &mut policy.filesystem {
-        fs.read_only.sort();
-        fs.read_write.sort();
-    }
-    let mut value = openshell_policy::sandbox_policy_to_json_value(&policy)
-        .map_err(|_| ObservationError::Incomplete)?;
-    value
-        .as_object_mut()
-        .ok_or(ObservationError::Incomplete)?
-        .entry("network_policies")
-        .or_insert_with(|| serde_json::json!({}));
-    // Refuse fields the SDK cannot retain, including credential bindings and middleware.
-    let typed: ExplicitPolicy =
-        serde_json::from_value(value.clone()).map_err(|_| ObservationError::Incomplete)?;
-    let decoded = typed.to_proto().map_err(|_| ObservationError::Incomplete)?;
-    if decoded != policy {
-        return Err(ObservationError::Incomplete);
-    }
-    value.sort_all_objects();
-    Ok(value.to_string())
-}
-pub fn policy_json(policy: &proto::SandboxPolicy) -> Result<String, ObservationError> {
-    if policy_matches(policy) {
-        return Ok(String::new());
-    }
-    canonical(policy)
-}
 // Baseline grants follow NVIDIA/OpenShell crates/openshell-supervisor/src/lib.rs
 // at 7e7a8d5610f336f5f7f9f60da0951adbf295475d (Apache-2.0).
 // 2026-09-17: compare image-dependent proxy additions without changing authored

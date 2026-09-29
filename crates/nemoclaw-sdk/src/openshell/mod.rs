@@ -6,19 +6,19 @@ mod tests;
 
 mod agent;
 mod agent_configuration;
-pub(crate) use agent::runtime_read_requirements;
-mod native_profile;
 mod network;
 mod profile;
-pub use native_profile::definition as inference_profile;
-pub use network::policy_json;
+pub use crate::config::{
+    inference_profile, isolated_policy as policy, isolated_policy_matches as policy_matches,
+    policy_json,
+};
 mod inference;
 use inference::{PROVIDERS_ENV, inference_environment};
 use network::row_policy;
 mod gateway;
 mod transport;
 use crate::{ObservationError, backend::Row};
-pub use agent::{command, environment, policy, policy_matches};
+pub use agent::{command, environment};
 pub use gateway::{GatewayCapabilities, GatewayObservation};
 use openshell_sdk::raw::proto;
 pub use transport::{EnvironmentSecrets, OpenShell, Secrets};

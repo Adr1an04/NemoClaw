@@ -327,6 +327,16 @@ fn default_network_is_a_valid_isolated_policy() {
     let default = Network::default();
     default.validate().unwrap();
     assert_eq!(default.policy, NetworkPolicy::Isolated);
+    let mut policy = default.policy_proto().unwrap();
+    policy.filesystem.as_mut().unwrap().read_only.reverse();
+    assert_eq!(nemoclaw_sdk::config::policy_json(&policy).unwrap(), "");
+    policy
+        .filesystem
+        .as_mut()
+        .unwrap()
+        .read_write
+        .push("/".into());
+    assert!(!matches!(nemoclaw_sdk::config::policy_json(&policy), Ok(value) if value.is_empty()));
     for value in [json!({}), json!({"tier": ""}), json!({"tier": "isolated"})] {
         assert_eq!(serde_json::from_value::<Network>(value).unwrap(), default);
     }

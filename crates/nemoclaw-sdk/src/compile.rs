@@ -115,7 +115,7 @@ fn targets_with_plans(
         let mut policy = sandbox.policy_proto(web_search.as_ref().map(|search| search.provider))?;
         for provider in document.sandbox_inference_providers(sandbox)? {
             let connection = document.provider_connection(provider.definition)?;
-            let profile = crate::openshell::inference_profile(
+            let profile = crate::config::inference_profile(
                 &provider.key,
                 &connection.endpoint,
                 provider.definition.provider,
@@ -136,7 +136,7 @@ fn targets_with_plans(
         }
         values.insert(
             "policy_json".into(),
-            crate::openshell::policy_json(&policy)
+            crate::config::policy_json(&policy)
                 .map_err(|_| ConfigError::new("cannot encode sandbox policy"))?,
         );
         {

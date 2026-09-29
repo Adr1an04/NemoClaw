@@ -7,9 +7,9 @@
 // 2026-09-19: removed the main-branch Landlock spelling translation and the
 // redundant external-proxy ownership annotation.
 // 2026-09-21: made policy selection exclusive in Rust while preserving the input shape.
-// 2026-09-23: obtain protocol types through the pinned OpenShell SDK's raw API.
+// 2026-09-28: use owner policy types independently of the transport client.
 use super::ConfigError;
-use openshell_sdk::raw::proto;
+use openshell_core::proto;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -327,7 +327,7 @@ impl Network {
         let Some(filesystem) = &policy.filesystem_policy else {
             return Ok(());
         };
-        for (required, diagnostic) in crate::openshell::runtime_read_requirements() {
+        for (required, diagnostic) in super::sandbox_policy::runtime_read_requirements() {
             let covered = filesystem
                 .read_only
                 .iter()
@@ -361,7 +361,7 @@ impl Network {
     }
     pub fn policy_proto(&self) -> Result<proto::SandboxPolicy, ConfigError> {
         match &self.policy {
-            NetworkPolicy::Isolated => Ok(crate::openshell::policy()),
+            NetworkPolicy::Isolated => Ok(super::isolated_policy()),
             NetworkPolicy::Explicit(policy) => policy.to_proto(),
         }
     }
