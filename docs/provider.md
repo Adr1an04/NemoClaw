@@ -87,7 +87,7 @@ An observation describes the selected target at the time of its read; it is not 
 |---|---|---|
 | Engine prerequisites | `nemoclaw_engine_capabilities`; selected Docker/Podman API | Onboarding target changes and managed deployment planning |
 | Engine features, CPU, memory, and advertised GPU inventory | `nemoclaw_target_hardware`; selected engine API | Onboarding and planning for selected gateway/service engines |
-| GPU memory, driver, compute capability, and disk measurements | Direct SDK `observe_host_hardware` with a selected `HostObserver` | Explicit direct calls or existing configured service-capacity checks; the new passive hardware source does not run collectors |
+| GPU memory, driver, compute capability, and disk measurements | Provider `observe_host_hardware` with a selected `HostObserver` | Explicit direct calls or existing configured service-capacity checks; the new passive hardware source does not run collectors |
 | Packaged adapters, APIs, settings, and runtime requirements | `nemoclaw_fabric_capabilities`; selected image metadata containing Fabric discovery results | Onboarding image changes and managed deployment planning |
 | Advertised models and catalog authentication | `nemoclaw_inference_capabilities`; HTTP model-list endpoint from the control host | Onboarding endpoint changes and planning for selected inference routes |
 | Credential-reference availability | Direct SDK `observe_credentials`; application's secret resolver | Onboarding, SDK calls, and plan-result discovery; values and local availability do not enter provider state |
@@ -125,6 +125,8 @@ Omitting requirements preserves metadata-only discovery.
 
 The [agent image builder](build.md#build-agent-images) reads `Fabric.discover()` inside each assembled image and stores the result in `io.nemoclaw.fabric.catalog`.
 It selects installed-package records using Fabric's provenance, without editing their descriptors.
+Harness image stages declare the directories where their layout installs each adapter; the builder records them as `runtime_files`, keyed by adapter ID, beside the descriptors.
+With deployment filesystem grants, every path in the adapter descriptor's `requirements.files` and in its `runtime_files` entry must fall under a grant.
 The bundled snapshot supports offline authoring and carries the same pinned Fabric revision and source checksum.
 See [source notices and regeneration](../image/NOTICE.md).
 Older images and direct Bake builds without labels remain unverified.
@@ -143,7 +145,7 @@ The passive read reports the daemon identity, architecture, CPU/memory fields, a
 GPU IDs advertised as engine generic resources are retained without inventing names, VRAM, driver versions, or compute capability.
 No GPU advertisement means unknown inventory, not zero GPUs.
 
-For complete host measurements, explicitly call the SDK's `hardware_discovery::observe_host_hardware` with the selected engine and a `HostObserver`.
+For complete host measurements, the provider library exposes `hardware_observation::observe_host_hardware` with the selected engine and a `HostObserver`.
 The operation checks the collector's daemon identity before accepting measurements and has a 30-second bound.
 It reports unsupported GPU memory counters separately from unobserved counters.
 Collector failure never falls back to the client's hardware.
@@ -170,9 +172,10 @@ See [SDK discovery](sdk.md#discover-before-authoring-or-planning) and [onboardin
 ## Gateway Capabilities
 
 The deployment graph reads `data.nemoclaw_gateway_capabilities.current` during planning through the provider's configured OpenShell connection.
-The data source reports the observed gateway version, driver names and aliases, driver-entry count, and compatibility with the required compute drivers.
+The data source reports the observed `gateway_version`, driver names and aliases in `compute_drivers`, the driver-entry count in `compute_driver_count`, `compatible` for the `required_compute_drivers`, and an `incompatibility` description that is empty when compatible.
 Compatibility requires the pinned OpenShell version and exactly one initialized driver matching every required name.
-OpenTofu lifecycle conditions report required and observed values when they differ.
+OpenTofu lifecycle conditions name each failed requirement with its required and observed values.
+SDK discovery observations use the same description as their `reason`.
 Missing metadata, authentication failures, and transport failures stop ordinary planning without changing runtime resources.
 Each API read is bounded to 30 seconds.
 
@@ -231,15 +234,17 @@ See [runtime ownership](design/runtime.md) and [recovery](models.md#diagnose-and
 ## Sandbox Completion
 
 The OpenShell graph uses `nemoclaw_sandbox_readiness` after sandbox creation and any runtime configuration resource.
-Its required `sandbox` map carries the sandbox resource's binding and configuration; the provider checks startup and configuration before requesting Fabric health.
+Its required `sandbox` map carries the sandbox resource's binding and configuration; the provider checks startup and configuration before requesting the packaged bridge's health response.
 It does not invoke an agent or model.
 The optional string `read_trigger` uses `uuid()` in generated graphs, making the read unknown during planning and recording a fresh token on every apply.
 
 The data source returns `ready`, nullable `health_json`, and nullable `error_message`.
-Runtime observation failures return `ready: false` with an error message; a valid Fabric response is retained in `health_json`, including unsupported health.
+Runtime observation failures return `ready: false` with an error message.
+The pinned bridge's explicit unsupported response is retained in `health_json`; unrecognized reports are errors.
 The graph must enforce `ready` with a lifecycle postcondition: a data-source observation alone does not reject an unsuccessful result.
 Failed postconditions retain observations and resource bindings for recovery.
-The SDK reads these values through OpenTofu JSON and preserves structured Fabric health in its result or error.
+The SDK reads these values through OpenTofu JSON and includes the unsupported bridge response in successful apply results.
+Failures preserve ordinary execution or observation errors without an unverified health payload.
 SDK-generated graphs defer health until apply; export and teardown omit the observation.
 Standalone configurations with known inputs may read during planning unless the trigger defers them.
 Existing sandbox resource refresh still verifies configuration.

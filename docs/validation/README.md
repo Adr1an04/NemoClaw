@@ -42,6 +42,7 @@ The subsequent [managed Podman qualification](rust-managed-podman-linux-arm64.md
 | Single DGX Station GB300, shared Qwen3-4B service, separate OpenClaw and Pi responses, no-op, export/reapply, and retained-storage destroy | [Station shared-model lifecycle](dgx-station-shared-model-linux-arm64.md) |
 | Model-specific runtime sources, licenses, and repeatable local artifact build | [Final runtime reproduction](rust-runtime-memory-fix-linux-arm64.json) |
 | Fabric native harness protocols and native OpenClaw settings | [Ten-harness SDK fixtures](rust-native-platforms.json), [seven native harness fixtures](rust-fabric-adapters-linux-arm64.json), [native OpenClaw](rust-native-openclaw-linux-arm64.json) |
+| Pinned Ollama version and synthetic cache inventory; bundled Hub downloader write limits | [Linux ARM64 model-cache qualification](model-cache-linux-arm64.md) |
 | Managed Ollama initial apply, no-op, export/reapply | [Real Docker/Ollama lifecycle](rust-ollama-linux-arm64.json) |
 | Ollama stopped-service recovery, independent retained storage, interrupted destroy and reapply | [Real provider/OpenTofu with deterministic fixtures](rust-ollama-recovery-linux-arm64.json) |
 | Deep Agents, Hermes and Fabric OpenClaw native responses, stable hosted runtime, no-op, export/reapply and teardown | [Live Fabric qualification](rust-fabric-live-linux-arm64.json) |

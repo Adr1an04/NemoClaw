@@ -441,11 +441,11 @@
               "x-nemoclaw-default-rule": "Omitted or empty selects the default."
             },
             "image": {
-              "default": "ghcr.io/nvidia/openshell/gateway@sha256:ec2b0efea84fff198e888e97c85befb9c908acde92e8256f9b527877ed182d66",
+              "default": "ghcr.io/nvidia/openshell/gateway@sha256:2fe4dad9118e14ab80a8258b545ea6e6cd74c3469e24ad4e6610f964d98913a2",
               "description": "Managed gateway image pinned by the SDK.",
               "enum": [
                 "",
-                "ghcr.io/nvidia/openshell/gateway@sha256:ec2b0efea84fff198e888e97c85befb9c908acde92e8256f9b527877ed182d66"
+                "ghcr.io/nvidia/openshell/gateway@sha256:2fe4dad9118e14ab80a8258b545ea6e6cd74c3469e24ad4e6610f964d98913a2"
               ],
               "type": "string",
               "x-nemoclaw-default-rule": "Omitted or empty selects the default."
@@ -1137,7 +1137,7 @@
     },
     "Network": {
       "additionalProperties": false,
-      "description": "Sandbox policy selection and optional agent HTTP proxy.",
+      "description": "Sandbox policy selection.",
       "if": {
         "required": [
           "policy"
@@ -1147,10 +1147,6 @@
         "policy": {
           "$ref": "#/$defs/ExplicitPolicySelection",
           "description": "Complete authored OpenShell policy, replacing the isolated preset."
-        },
-        "proxy": {
-          "$ref": "#/$defs/Proxy",
-          "description": "HTTP proxy address used by the agent process. Does not create a proxy or change gateway networking."
         },
         "tier": {
           "anyOf": [
@@ -1604,10 +1600,8 @@
           "type": "array"
         },
         "tls": {
-          "description": "terminate, passthrough, or skip, subject to protocol validation.",
+          "description": "Omit for automatic TLS handling, or use skip for a raw tunnel.",
           "enum": [
-            "terminate",
-            "passthrough",
             "skip"
           ],
           "type": "string"
@@ -1788,31 +1782,6 @@
         }
       ],
       "description": "A literal glob or a nonempty list of alternative globs."
-    },
-    "Proxy": {
-      "additionalProperties": false,
-      "description": "Existing agent HTTP proxy, reachable from inside the sandbox. NemoClaw does not manage it. Credentials and URL syntax are excluded.",
-      "properties": {
-        "host": {
-          "description": "Proxy hostname or IPv4 address, without scheme, path, or credentials.",
-          "maxLength": 256,
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9._-]+$",
-          "type": "string"
-        },
-        "port": {
-          "description": "Proxy TCP port, from 1 through 65535.",
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 1,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "host",
-        "port"
-      ],
-      "type": "object"
     },
     "Resources": {
       "additionalProperties": false,

@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use nemoclaw_e2e::openshell::Fixture;
+use nemoclaw_provider::openshell::{EnvironmentSecrets, OpenShell};
 use nemoclaw_sdk::{
     backend::Backend,
     compile::{Generations, targets},
     config::Document,
-    openshell::{EnvironmentSecrets, OpenShell},
 };
 use std::sync::Arc;
 
@@ -44,12 +44,12 @@ async fn sandbox_teardown_requires_owned_identity_but_not_its_previous_configura
             "id" => metadata.id = "replacement".into(),
             "owner" => metadata
                 .labels
-                .remove(nemoclaw_sdk::openshell::OWNER)
+                .remove(nemoclaw_provider::openshell::OWNER)
                 .map(|_| ())
                 .unwrap(),
             _ => metadata
                 .labels
-                .remove(nemoclaw_sdk::openshell::GENERATION)
+                .remove(nemoclaw_provider::openshell::GENERATION)
                 .map(|_| ())
                 .unwrap(),
         }
@@ -102,7 +102,7 @@ async fn owning_api_reconciles_lost_create_reply_and_checks_conditional_updates(
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
     struct Keys;
-    impl nemoclaw_sdk::openshell::Secrets for Keys {
+    impl nemoclaw_sdk::Secrets for Keys {
         fn resolve(&self, _: &str) -> Result<String, nemoclaw_sdk::ObservationError> {
             Ok("owned-fixture-credential".into())
         }
@@ -296,6 +296,72 @@ async fn sandbox_launch_policy_and_provider_identity_survive_read_failures() {
 }
 
 #[tokio::test]
+async fn sandbox_exec_uses_the_bound_workspace_and_rejects_substituted_identity() {
+    let fixture = Fixture::start().await;
+    let mut document = Document::parse(
+        include_str!("../../nemoclaw-sdk/tests/fixtures/config/local.yaml").as_bytes(),
+    )
+    .unwrap();
+    *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let client = OpenShell::connect(&document.spec.gateway, Arc::new(EnvironmentSecrets)).unwrap();
+    let generations = ["workspace", "provider", "sandbox"]
+        .map(|key| (key.into(), format!("{key}-generation")))
+        .into();
+    let mut binding = None;
+    for target in targets(&document, &generations)
+        .unwrap()
+        .into_iter()
+        .filter(|target| target.kind != "agent_configuration")
+    {
+        let result = client.ensure(&target.kind, &target.values).await;
+        assert!(result.error().is_none());
+        if target.kind == "sandbox" {
+            binding = result.into_parts().0;
+        }
+    }
+    let binding = binding.unwrap();
+    assert_ne!(binding["workspace"], "default");
+    let command = vec!["fixture".into()];
+    assert_eq!(
+        client
+            .exec_bound(&binding, command.clone(), Default::default(), 5)
+            .await
+            .unwrap(),
+        (0, Vec::new())
+    );
+    let key = format!("{}/{}", binding["workspace"], binding["name"]);
+    let original = fixture.state.lock().unwrap().sandboxes[&key].clone();
+    for field in ["id", "owner", "generation"] {
+        let mut changed = original.clone();
+        let metadata = changed.metadata.as_mut().unwrap();
+        match field {
+            "id" => metadata.id = "replacement".into(),
+            "owner" => {
+                metadata.labels.remove(nemoclaw_provider::openshell::OWNER);
+            }
+            _ => {
+                metadata
+                    .labels
+                    .remove(nemoclaw_provider::openshell::GENERATION);
+            }
+        }
+        fixture
+            .state
+            .lock()
+            .unwrap()
+            .sandboxes
+            .insert(key.clone(), changed);
+        assert!(
+            client
+                .exec_bound(&binding, command.clone(), Default::default(), 5)
+                .await
+                .is_err()
+        );
+    }
+    assert_eq!(fixture.state.lock().unwrap().exec_calls, vec![command]);
+}
+
+#[tokio::test]
 async fn sandbox_exec_deadline_bounds_a_stream_that_never_finishes() {
     let fixture = Fixture::start().await;
     let mut document = Document::parse(
@@ -421,7 +487,7 @@ async fn failed_readback_retains_each_created_identity_until_explicit_recovery()
 }
 
 #[tokio::test]
-async fn explicit_policy_and_proxy_reach_the_gateway_and_detect_drift() {
+async fn explicit_policy_reaches_the_gateway_and_detects_drift() {
     let fixture = Fixture::start().await;
     let mut document =
         Document::parse(include_bytes!("../../../examples/explicit-policy.yaml").as_slice())
@@ -453,20 +519,16 @@ async fn explicit_policy_and_proxy_reach_the_gateway_and_detect_drift() {
         .clone()
         .unwrap();
     assert_eq!(
-        nemoclaw_sdk::openshell::policy_json(spec.policy.as_ref().unwrap()).unwrap(),
+        nemoclaw_provider::openshell::policy_json(spec.policy.as_ref().unwrap()).unwrap(),
         sandbox["policy_json"]
     );
-    assert_eq!(spec.command[0], "/usr/bin/env");
-    assert!(
-        spec.command
-            .contains(&"HTTPS_PROXY=http://10.200.0.1:3128".into())
-    );
-    assert_eq!(spec.environment["NEMOCLAW_PROXY_PORT"], "3128");
+    assert!(!spec.command.iter().any(|arg| arg.contains("PROXY=")));
+    assert!(!spec.environment.keys().any(|key| key.contains("PROXY")));
     let effects = fixture.state.lock().unwrap().effects;
     assert!(client.ensure("sandbox", sandbox).await.error().is_none());
     assert_eq!(fixture.state.lock().unwrap().effects, effects);
     // A loaded revision must match the sandbox specification, not just its status.
-    fixture.state.lock().unwrap().active_policy = Some(nemoclaw_sdk::openshell::policy());
+    fixture.state.lock().unwrap().active_policy = Some(nemoclaw_provider::openshell::policy());
     assert!(client.read("sandbox", sandbox, false).await.is_err());
     fixture.state.lock().unwrap().active_policy = None;
     // A coherent but different policy is observed as drift and never overwritten.

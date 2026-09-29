@@ -126,7 +126,7 @@ def main() -> int:
                 current = await_text(marker)
                 if marker == "Enter  author YAML":
                     for expected in (f"Deployment: {NAME}", "Harness: nvidia.fabric.openclaw",
-                                     "Runtime: Docker", "Set NVIDIA_INFERENCE_API_KEY before applying."):
+                                     "Runtime: Docker", "Set NVIDIA_API_KEY before applying."):
                         if expected not in current:
                             raise RuntimeError(f"review is missing {expected!r}")
                 json.dump({"step": number, "expected": marker, "screen": current}, log)
@@ -152,7 +152,7 @@ def main() -> int:
             r"(?m)^    engine: unix:///var/run/docker\.sock$",
             r"(?m)^      tier: isolated$",
             r"(?m)^            model: nvidia/nemotron-3-super-120b-a12b$",
-            r"(?m)^      env: NVIDIA_INFERENCE_API_KEY$",
+            r"(?m)^      env: NVIDIA_API_KEY$",
         ):
             if not re.search(pattern, yaml):
                 raise RuntimeError(f"saved YAML is missing {pattern!r}")

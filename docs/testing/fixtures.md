@@ -108,11 +108,12 @@ A failed assertion reports the OpenTofu diagnostic; rerun after correcting the m
 
 ## Ollama and Platform Fixtures
 
-Managed Ollama's deterministic SDK tests use local registry, capacity, configuration, and runtime-plan fixtures, not live containers or model downloads.
+Managed Ollama's deterministic runtime, provider, and SDK tests use local registry, capacity, configuration, and runtime-plan fixtures, not live containers or model downloads.
 They cover immutable model resolution, bounded readiness, retained storage, service references, independent installer resources, and provider connection resolution:
 
 ```sh
-cargo test -p nemoclaw-sdk services::installers::ollama
+cargo test -p nemoclaw-runtime ollama
+cargo test -p nemoclaw-provider --lib
 cargo test -p nemoclaw-sdk --test service_references --test multiple_providers
 ```
 
@@ -127,6 +128,38 @@ The native CI matrix builds and executes bundles on Linux ARM64/x64, macOS ARM64
 CI's protocol and lifecycle fixtures do not establish local Docker, Podman, GPU, or real model availability on those platforms.
 Report build results separately from runtime test results.
 
+## Model Cache Compatibility
+
+On native Linux with local Docker, pull the Ollama base image pinned in this checkout before selecting the opt-in cache test.
+The test creates a temporary cache and one container, exposes its inventory API on an ephemeral loopback port, and removes both afterward.
+It resumes complete synthetic files through NemoClaw's verifier, then checks the actual Ollama inventory and version.
+It downloads no model and exposes no GPU.
+From the repository root:
+
+```sh
+ollama_base=$(awk '$1 == "FROM" { print $2; exit }' runtimes/ollama/Dockerfile)
+docker pull "$ollama_base"
+NEMOCLAW_TEST_OLLAMA_CACHE=1 cargo test -p nemoclaw-runtime --test ollama_cache -- --ignored --nocapture
+```
+
+A failure identifies either the cache contract or a mismatch between the runtime image and `versions.json`.
+Correct the runtime pin or adapter before rerunning; never point the fixture at a deployment's cache.
+If the test process is forcibly killed, inspect containers with label `org.nemoclaw.test=ollama-cache` and remove only the container created by that run.
+
+Evaluate the Hugging Face client shipped in the vLLM base image with a private loopback server:
+
+```sh
+vllm_base=$(awk '$1 == "FROM" { print $2; exit }' runtimes/vllm/Dockerfile)
+docker pull "$vllm_base"
+docker run --rm --runtime=runc --network none --env HF_HUB_DISABLE_PROGRESS_BARS=1 \
+  --volume "$PWD/runtimes/vllm/test_download.py:/test_download.py:ro" \
+  --entrypoint python3 "$vllm_base" /test_download.py
+```
+
+This test documents why post-download verification cannot preserve bounded writes with the evaluated client.
+It expects the client to write an oversized fixture before raising a size error; if that behavior changes, reevaluate whether the owner client can replace NemoClaw's downloader.
+See the [recorded results and limits](../validation/model-cache-linux-arm64.md).
+
 ## Runtime Image Loading
 
 On a native Linux host, complete the [runtime image build prerequisites](../build.md#build-a-runtime-image).
@@ -135,7 +168,7 @@ It removes its image tag afterward; Docker's build cache remains.
 Run from the repository root:
 
 ```sh
-NEMOCLAW_TEST_RUNTIME_IMAGE=1 cargo test -p nemoclaw-build --bin nemoclaw-build runtime_archive_loads_with_its_exported_digest -- --ignored
+NEMOCLAW_TEST_RUNTIME_IMAGE=1 cargo test -p nemoclaw-build --no-default-features --bin nemoclaw-build runtime_archive_loads_with_its_exported_digest -- --ignored
 ```
 
 A failure reports the build, load, or identity check that failed; correct the Docker configuration and rerun.

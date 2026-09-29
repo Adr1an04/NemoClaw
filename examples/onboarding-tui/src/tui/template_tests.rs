@@ -109,7 +109,8 @@ fn exercise_templates(rename: bool) {
             "{} lost template settings during loading",
             path.display()
         );
-        // The template corpus includes managed Podman, which requires a Linux host.
+        // Template preservation includes the local-Linux Podman preset.
+        // Unsupported-host behavior is exercised separately on every CI host.
         let mut wizard = Wizard::for_host(capabilities, draft, "linux");
         finish(&mut wizard, path, rename);
         let reviewed = wizard.draft().review().unwrap();
@@ -294,7 +295,7 @@ fn model_token_limit_is_editable_without_changing_native_settings() {
 }
 
 #[test]
-fn explicit_policy_is_editable_without_changing_gateway_or_proxy() {
+fn explicit_policy_is_editable_without_changing_gateway() {
     let (_, wizard) = template_wizard("explicit-policy.yaml");
     let document = serde_json::to_value(wizard.draft().document()).unwrap();
     let path = "/spec/sandboxes/0/network/policy";
