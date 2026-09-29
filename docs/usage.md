@@ -231,6 +231,10 @@ Existing state needs the [named-resource transition](state.md#named-sandbox-reso
 | Remove a sandbox, retained storage, or a protected gateway binding | Ordinary apply refuses removal; assess a separate deployment and explicit retirement of the original |
 | Change a credential value behind the same environment reference | Unchanged apply does not detect rotation; see [credential lifecycle](security.md#credentials-and-authentication) |
 
+A request to remove or replace a bound sandbox is rejected before managed-runtime reconciliation, including when the same request changes a managed service.
+The refusal names the sandbox and preserves retained intent and resource state.
+Export and destroy can still use the retained configuration without reapplying the original YAML; their usual observation and ownership checks still apply.
+
 The [provider lifecycle contract](provider.md#openshell-resource-lifecycles) distinguishes reconstructible registrations and configuration from protected sandbox data and durable identity.
 OpenShell refuses deletion of a registration still attached to a sandbox or a profile still referenced by a registration.
 Ordinary apply can recreate a missing registration after confirmed absence, while preserving the sandbox's identity and files.
