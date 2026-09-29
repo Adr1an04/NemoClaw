@@ -12,28 +12,11 @@ use crate::{
     services::installers::ollama::{ManagedOllama, policy},
 };
 use process_wrap::tokio::{KillOnDrop, ProcessGroup};
-use std::{fs, io::Write, path::Path, time::Duration};
+use std::{fs, path::Path, time::Duration};
 
 const ROOT: &str = "/data";
 
-pub(crate) fn report(phase: &str, detail: &str, pid: u32) -> Result<(), Error> {
-    let updated = time::OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Rfc3339)
-        .map_err(|_| Error::State("cannot timestamp runtime status"))?;
-    let value = serde_json::json!({"phase":phase,"detail":detail,"updated":updated,"pid":pid});
-    let mut file = tempfile::NamedTempFile::new_in(ROOT)
-        .map_err(|_| Error::State("cannot write runtime status"))?;
-    file.write_all(&serde_json::to_vec(&value).expect("status JSON"))
-        .and_then(|()| file.as_file().sync_all())
-        .map_err(|_| Error::State("cannot sync runtime status"))?;
-    file.persist(Path::new(ROOT).join("status.json"))
-        .map_err(|_| Error::State("cannot commit runtime status"))?;
-    fs::File::open(ROOT)
-        .and_then(|directory| directory.sync_all())
-        .map_err(|_| Error::State("cannot sync runtime status directory"))?;
-    eprintln!("{phase}: {detail}");
-    Ok(())
-}
+pub(super) use crate::services::runtime::report;
 
 pub(in crate::services) async fn run(
     service: &ManagedOllama,
