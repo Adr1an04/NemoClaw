@@ -227,3 +227,38 @@ The test checks read-only planning, unchanged apply, stopped/deleted process rec
 It also replaces the listen port inside the runtime-stage test and temporarily substitutes the owned encryption key to verify rejection without state changes, then restores the original key.
 That internal replacement test does not authorize retargeting an established public deployment endpoint; the SDK still rejects that operation.
 The gateway image remains pinned by the SDK.
+
+## Docker Gateway Isolation
+
+The provider's `pinned_docker_gateways_reach_ready_without_interfering_with_other_sandboxes` test runs two managed Docker gateways against the SDK's pinned OpenShell images on a native Linux host.
+Prepare two owned deployment documents with distinct fresh UUIDs, unused loopback ports, and unused private `/24` subnets on the same local Docker engine.
+Both documents must select managed gateways, Docker sandboxes, external inference, and no managed services.
+The test refuses existing gateway containers, initializers, volumes, or networks at either identity.
+
+The engine must already contain the gateway, supervisor, and sandbox runtime images from [versions.json](../../versions.json), plus the immutable sandbox image selected below.
+That sandbox image must provide `/bin/sh`, `/bin/sleep`, and `/bin/cat`, and permit a file under `/tmp` through OpenShell's default policy.
+The test uses the documents' gateway settings and creates its own `isolation-check` sandbox in each gateway's default workspace.
+It attaches no inference providers and requests no model response.
+
+Successful completion removes both owned sandboxes and gateway processes, but retains gateway storage, including signing and encryption keys, plus its initializer and bridge.
+The test calls the provider and SDK directly and creates no OpenTofu state directory.
+Keep the input documents to identify the retained resources.
+Another run requires fresh deployment UUIDs, ports, and subnets; the test refuses the previous run's retained resources.
+A verified manual cleanup procedure remains [TBD](../state.md#deletion-and-retention).
+
+From the repository root, with absolute document paths and the local sandbox image's actual digest:
+
+```sh
+NEMOCLAW_TEST_GATEWAY_DOCUMENT=/absolute/path/to/first-owned-deployment.yaml \
+NEMOCLAW_TEST_SECOND_GATEWAY_DOCUMENT=/absolute/path/to/second-owned-deployment.yaml \
+NEMOCLAW_TEST_GATEWAY_SANDBOX_IMAGE=repository@sha256:REPLACE_WITH_LOCAL_IMAGE_DIGEST \
+  cargo test -p nemoclaw-provider --test managed_gateway_live \
+    pinned_docker_gateways_reach_ready_without_interfering_with_other_sandboxes -- --ignored --exact --nocapture
+```
+
+Both sandboxes must reach Ready and execute commands through the real supervisor callback.
+Starting and restarting the second gateway must preserve the first sandbox's identity, readiness, and test file.
+Failures also retain resources for diagnosis; the test prints the owned gateway names and endpoints.
+Inspect those resources with the original documents before choosing cleanup or a separate fresh run; rerunning the same inputs is refused.
+Use the separate [gateway recovery test](#docker-gateway-recovery) to qualify the bundled OpenTofu path.
+This test does not qualify imported provider profiles, Fabric readiness, or agent replies.
