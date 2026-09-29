@@ -14,7 +14,9 @@ These images install Fabric's locally built wheels alongside the export without 
 Hermes retains `fabric/hermes-dependencies.lock` because Fabric's Hermes extra excludes the native checkout and its build dependencies.
 Its image applies Fabric's exact upstream patch; [the Hermes source notice](fabric/HERMES-NOTICE.md) records the revisions and modification.
 
-Plugin placement remains in the Dockerfile because the pinned Fabric supplies plugin assets and placement instructions without an installation command.
+OpenClaw installs the pinned search plugin archives through its native installer; the image packages them in OpenClaw’s bundled-plugin directory.
+Examples select plugin IDs without filesystem paths.
+Hermes plugin placement remains in the Dockerfile because the pinned Fabric supplies its Tavily assets and placement instructions without an installation command.
 Pi's builder follows Fabric's focused installation recipe and packs its adapter, common, and contract packages; those pinned packages are not published on npm.
 The runtime contains their packed code and npm's locked dependencies, including Pi's declared peers, without the Fabric source tests.
 Fabric owns those source tests.
@@ -26,6 +28,9 @@ The [provider command helper](../crates/nemoclaw-provider/src/openshell/agent.rs
 
 [`build_fabric.py`](build_fabric.py) builds local images, runs Fabric discovery in each installed environment without starting an adapter, and attaches the returned snapshot as `io.nemoclaw.fabric.catalog`.
 It selects installed-package records using Fabric provenance and preserves the descriptor contents.
+The Dockerfile records each adapter’s additional runtime directories in `/opt/nemoclaw/runtime-files.json`; the image catalog includes them as `runtime_files`.
+Image tests verify that these directories exist and are readable by the runtime user.
+The SDK checks explicit filesystem grants against those image-owned paths without adding requirements to Fabric descriptors.
 It does not publish images.
 Direct Docker Bake builds do not attach discovery metadata.
 

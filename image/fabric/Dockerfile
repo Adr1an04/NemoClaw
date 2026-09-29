@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 ARG NODE_IMAGE=node:24.21.0-trixie-slim@sha256:db3ae80f5d8df06e04dabdf7b44cbf008d32de168205fa0294444aabbc08c590
-ARG PYTHON_IMAGE=python:3.14.7-slim-trixie@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6
+ARG PYTHON_IMAGE=python:3.13.15-slim-trixie@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285
 ARG RUST_IMAGE=rust@sha256:ce84a5edd80c5f91e05c5533b1e53eb1da54028f33734dc06aa6b49fa190462d
 ARG UV_IMAGE=ghcr.io/astral-sh/uv@sha256:3d868e555f8f1dbc324afa005066cd11e1053fc4743b9808ca8025283e65efa5
 ARG OPENCLAW_IMAGE=ghcr.io/openclaw/openclaw@sha256:cc596b846506a5f4cfcee111394a2725f375f01cca2ebb492a161fd1b747f101
@@ -76,21 +76,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ripgrep && 
 FROM interactive AS openclaw
 COPY --from=openclaw-upstream /app /app
 RUN ln -s /app/openclaw.mjs /usr/local/bin/openclaw
-ADD --checksum=sha256:2b403a4b2d2be7a793235a458e2d376f38588fd913f41b92e208e8421a2a1617 https://registry.npmjs.org/@openclaw/brave-plugin/-/brave-plugin-2026.9.4.tgz /tmp/brave.tgz
-RUN mkdir -p /opt/nemoclaw/plugins/brave/node_modules \
-    && tar -xzf /tmp/brave.tgz -C /opt/nemoclaw/plugins/brave --strip-components=1 \
-    && ln -s /app /opt/nemoclaw/plugins/brave/node_modules/openclaw && rm /tmp/brave.tgz
-COPY image/fabric/BRAVE-LICENSE /opt/nemoclaw/plugins/brave/LICENSE
-COPY image/fabric/BRAVE-NOTICE.md /opt/nemoclaw/plugins/brave/NOTICE.md
-ADD --checksum=sha256:9b250b5ed8660247947701c4df3fb8b1c6b32fd7e30b7a186c7ae763e30c29e8 https://registry.npmjs.org/@openclaw/tavily-plugin/-/tavily-plugin-2026.9.4.tgz /tmp/tavily.tgz
-RUN mkdir -p /opt/nemoclaw/plugins/tavily/node_modules \
-    && tar -xzf /tmp/tavily.tgz -C /opt/nemoclaw/plugins/tavily --strip-components=1 \
-    && ln -s /app /opt/nemoclaw/plugins/tavily/node_modules/openclaw && rm /tmp/tavily.tgz
-COPY image/fabric/TAVILY-LICENSE /opt/nemoclaw/plugins/tavily/LICENSE
-COPY image/fabric/TAVILY-NOTICE.md /opt/nemoclaw/plugins/tavily/NOTICE.md
+ADD --chown=node:node --checksum=sha256:2b403a4b2d2be7a793235a458e2d376f38588fd913f41b92e208e8421a2a1617 https://registry.npmjs.org/@openclaw/brave-plugin/-/brave-plugin-2026.9.4.tgz /tmp/brave.tgz
+ADD --chown=node:node --checksum=sha256:9b250b5ed8660247947701c4df3fb8b1c6b32fd7e30b7a186c7ae763e30c29e8 https://registry.npmjs.org/@openclaw/tavily-plugin/-/tavily-plugin-2026.9.4.tgz /tmp/tavily.tgz
 # catalog.py records this layout so planning checks explicit filesystem grants.
 RUN printf '%s\n' '{"nvidia.fabric.openclaw": ["/app"]}' > /opt/nemoclaw/runtime-files.json
 USER node
+# Native installation owns extraction and peer dependencies; package its output
+# in OpenClaw's bundled-plugin directory so each runtime discovers it naturally.
+RUN --network=none OPENCLAW_STATE_DIR=/tmp/plugin-build OPENCLAW_CONFIG_PATH=/tmp/plugin-build/config.json \
+    node /app/openclaw.mjs plugins install --force --accept-capabilities /tmp/brave.tgz \
+    && OPENCLAW_STATE_DIR=/tmp/plugin-build OPENCLAW_CONFIG_PATH=/tmp/plugin-build/config.json \
+    node /app/openclaw.mjs plugins install --force --accept-capabilities /tmp/tavily.tgz \
+    && mv /tmp/plugin-build/extensions/brave /tmp/plugin-build/extensions/tavily /app/dist/extensions/ \
+    && rm -rf /tmp/plugin-build /tmp/brave.tgz /tmp/tavily.tgz
+COPY image/fabric/BRAVE-LICENSE /app/dist/extensions/brave/LICENSE
+COPY image/fabric/BRAVE-NOTICE.md /app/dist/extensions/brave/NOTICE.md
+COPY image/fabric/TAVILY-LICENSE /app/dist/extensions/tavily/LICENSE
+COPY image/fabric/TAVILY-NOTICE.md /app/dist/extensions/tavily/NOTICE.md
 
 FROM base AS hermes-assets
 ARG HERMES_REVISION=29112bef099274229cadff79cdff7bf7b99c4b77

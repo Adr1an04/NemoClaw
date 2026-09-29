@@ -46,8 +46,6 @@ spec:
               metrics: false
               logs: false
           plugins:
-            load:
-              paths: [/opt/nemoclaw/plugins/brave]
             allow:
               - brave
               - diagnostics-otel

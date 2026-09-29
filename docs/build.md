@@ -71,8 +71,8 @@ Pass `--platform linux/arm64` or `--platform linux/amd64` to the agent image bui
 Direct Bake checks and proxy builds require the corresponding `AGENT_PLATFORM` environment variable.
 ARM64 selects all ten harnesses; AMD64 selects Deep Agents and OpenClaw.
 The remaining harnesses are ARM64-only until their pinned native dependencies have matching AMD64 artifacts and qualification.
-Agent images use Node.js 24.21.0 LTS and Python 3.14.7.
-The `nooa`, `nooa-bench`, and `hermes` targets use Python 3.13.15 because their pinned upstream releases require Python below 3.14.
+Agent images use Node.js 24.21.0 LTS and a shared Python 3.13.15 base.
+Image qualification checks that interpreter against every Python adapter’s declared version range in the pinned Fabric source.
 Build stages use pinned Rust, Node, Python, and uv images, so the host needs no language toolchains for image assembly.
 Initial builds need network access to fetch the pinned base images, source archives, and package dependencies.
 Digest-based sandbox use requires a Docker image store that retains repository digests for local builds, such as the tested containerd store.

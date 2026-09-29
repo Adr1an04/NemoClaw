@@ -50,13 +50,10 @@ target "agents" {
   name = harness
   matrix = { harness = PLATFORM_HARNESSES[AGENT_PLATFORM] }
   target = HARNESSES[harness].stage
-  args = merge({
+  args = {
     HARNESS = harness
     ADAPTER = HARNESSES[harness].adapter
-  }, contains(["nooa", "nooa-bench", "hermes"], harness) ? {
-    # The pinned Nooa and Hermes releases require Python <3.14.
-    PYTHON_IMAGE = "python:3.13.15-slim-trixie@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285"
-  } : {})
+  }
   tags = ["${IMAGE_PREFIX}:${harness}"]
 }
 
