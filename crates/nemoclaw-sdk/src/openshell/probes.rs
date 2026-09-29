@@ -155,13 +155,7 @@ impl OpenShell {
         serde_json::from_str::<nemo_fabric_core::FabricConfig>(config)
             .map_err(|_| ObservationError::Query)?;
         Ok((
-            vec![
-                "/opt/fabric/bin/python".into(),
-                "/opt/nemoclaw/fabric.py".into(),
-                "check".into(),
-                value(binding, "agent_name").into(),
-                config.into(),
-            ],
+            agent::fabric_command(&["check", value(binding, "agent_name"), config]),
             Row::new(),
         ))
     }
@@ -229,13 +223,7 @@ impl OpenShell {
         binding: &Row,
         agent: Option<&str>,
     ) -> Result<crate::RuntimeHealth, Error> {
-        let mut command = [
-            "/opt/fabric/bin/python",
-            "/opt/nemoclaw/fabric.py",
-            "health",
-        ]
-        .map(String::from)
-        .to_vec();
+        let mut command = agent::fabric_command(&["health"]);
         command.extend(agent.map(String::from));
         let (exit, output) = self.exec_bound(binding, command, Row::new(), 10).await?;
         if exit != 0 {

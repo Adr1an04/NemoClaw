@@ -13,13 +13,18 @@ pub(crate) fn runtime_read_requirements() -> impl Iterator<Item = (&'static str,
     ].into_iter()
 }
 
+/// Fixed bridge interface packaged by image/fabric/Dockerfile.
+pub(super) fn fabric_command(arguments: &[&str]) -> Vec<String> {
+    ["/opt/fabric/bin/python", "/opt/nemoclaw/fabric.py"]
+        .into_iter()
+        .chain(arguments.iter().copied())
+        .map(String::from)
+        .collect()
+}
+
 pub fn command(runtime: &str) -> Vec<String> {
     if runtime == "fabric" {
-        vec![
-            "/opt/fabric/bin/python".into(),
-            "/opt/nemoclaw/fabric.py".into(),
-            "serve".into(),
-        ]
+        fabric_command(&["serve"])
     } else {
         Vec::new()
     }
