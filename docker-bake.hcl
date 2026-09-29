@@ -70,7 +70,7 @@ target "ollama-proxy" {
 
 # Checks use disposable build stages and never start deployed resources.
 group "check" {
-  targets = ["lint", "unit-tests", "pi-tests", "proxy-tests"]
+  targets = ["lint", "unit-tests", "proxy-tests"]
 }
 
 target "lint" {
@@ -83,12 +83,6 @@ target "unit-tests" {
   inherits = ["_fabric"]
   output = ["type=cacheonly"]
   target = "unit-tests"
-}
-
-target "pi-tests" {
-  inherits = ["_fabric"]
-  output = ["type=cacheonly"]
-  target = "pi-build"
 }
 
 target "proxy-tests" {

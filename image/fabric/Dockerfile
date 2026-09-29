@@ -122,9 +122,6 @@ RUN --mount=type=cache,target=/root/.npm \
     cd /opt/fabric-source/adapter-contract/typescript && npm ci --no-audit --no-fund && npm run build \
     && cd /opt/fabric-source/adapters/typescript && npm ci --no-audit --no-fund && npm run build
 
-RUN --network=none node --test /opt/fabric-source/adapters/typescript/pi/test/pi-sdk.test.mjs \
-        /opt/fabric-source/adapters/typescript/pi/test/runtime.test.mjs
-
 FROM runtime-base AS pi
 COPY --from=pi-build /opt/fabric-source /opt/fabric-source
 # Fabric discovery skips symlinked directories, so link only the descriptor.

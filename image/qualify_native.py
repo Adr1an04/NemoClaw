@@ -9,6 +9,7 @@ Upstream: NVIDIA/NeMo-Fabric 24f068c895e5cbc30286bc743498be4e5014d658
 tests/native/qualify.py, Apache-2.0. 2026-09-28: moved to NemoClaw, whose
 image CI is its only caller; the usage line names this file, and the code
 is formatted for NemoClaw's line length.
+2026-09-28: use a Pi-known model identifier for the owned inference fixture.
 """
 
 import argparse
@@ -33,9 +34,7 @@ class Inference(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(
-            json.dumps({"object": "list", "data": [{"id": "fabric-native-model"}]}).encode()
-        )
+        self.wfile.write(json.dumps({"object": "list", "data": [{"id": "gpt-4.1-mini"}]}).encode())
 
     def do_POST(self):
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
@@ -48,7 +47,7 @@ class Inference(BaseHTTPRequestHandler):
             "id": "native-test",
             "object": "chat.completion",
             "created": 1,
-            "model": "fabric-native-model",
+            "model": "gpt-4.1-mini",
             "choices": [
                 {
                     "index": 0,
@@ -95,7 +94,7 @@ async def qualify(adapter_id, settings):
                         "default": {
                             "provider": "openai",
                             "api": "openai-completions",
-                            "model": "fabric-native-model",
+                            "model": "gpt-4.1-mini",
                             "api_key_env": "FABRIC_NATIVE_TEST_KEY",
                             "base_url": f"http://127.0.0.1:{server.server_port}/v1",
                         }

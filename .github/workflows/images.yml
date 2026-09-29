@@ -71,4 +71,5 @@ jobs:
           if [ "$AGENT_PLATFORM" = linux/arm64 ]; then
             native nc-fabric:hermes qualify_native.py nvidia.fabric.hermes --settings '{"mode":"service"}'
             native nc-fabric:hermes hermes_security.py
+            native nc-fabric:pi qualify_native.py nvidia.fabric.pi
           fi
