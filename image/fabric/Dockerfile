@@ -120,8 +120,11 @@ RUN --network=none node --test /opt/fabric-source/adapters/typescript/pi/test/pi
 
 FROM runtime-base AS pi
 COPY --from=pi-build /opt/fabric-source /opt/fabric-source
-RUN mkdir -p /opt/fabric/share/nemo-fabric/adapters \
-    && ln -s /opt/fabric-source/adapters/typescript/pi /opt/fabric/share/nemo-fabric/adapters/pi
+# Fabric discovery skips symlinked directories, so link only the descriptor.
+# Its runner script resolves beside the real file under /opt/fabric-source.
+RUN mkdir -p /opt/fabric/share/nemo-fabric/adapters/pi \
+    && ln -s /opt/fabric-source/adapters/typescript/pi/pi.fabric-adapter.json \
+        /opt/fabric/share/nemo-fabric/adapters/pi/pi.fabric-adapter.json
 USER node
 
 FROM base AS lint
