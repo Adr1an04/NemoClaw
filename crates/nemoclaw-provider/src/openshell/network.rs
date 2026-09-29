@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 use super::*;
-use crate::config::ExplicitPolicy;
+use nemoclaw_sdk::config::ExplicitPolicy;
 
 // Baseline grants follow NVIDIA/OpenShell crates/openshell-supervisor/src/lib.rs
 // at 7e7a8d5610f336f5f7f9f60da0951adbf295475d (Apache-2.0).

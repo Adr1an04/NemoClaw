@@ -6,7 +6,8 @@
 //! The deployment core consumes package-independent install plans. Consumer
 //! bindings, package dispatch, readiness checks, and destroy policy remain here.
 
-pub(crate) mod authentication;
+#[doc(hidden)]
+pub mod authentication;
 pub(crate) mod capacity;
 mod contract;
 pub mod placement;

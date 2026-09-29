@@ -8,7 +8,7 @@ mod agent;
 mod agent_configuration;
 mod network;
 mod profile;
-pub use crate::config::{
+pub use nemoclaw_sdk::config::{
     inference_profile, isolated_policy as policy, isolated_policy_matches as policy_matches,
     policy_json,
 };
@@ -17,15 +17,17 @@ use inference::{PROVIDERS_ENV, inference_environment};
 use network::row_policy;
 mod gateway;
 mod transport;
-use crate::{ObservationError, backend::Row};
 pub use agent::{command, environment};
-pub use gateway::{GatewayCapabilities, GatewayObservation};
+use nemoclaw_sdk::{ObservationError, backend::Row};
+
+use nemoclaw_sdk::config::credential_metadata;
+pub use nemoclaw_sdk::{EnvironmentSecrets, Secrets};
 use openshell_sdk::raw::proto;
-pub use transport::{EnvironmentSecrets, OpenShell, Secrets};
+pub use transport::OpenShell;
 
 pub const OWNER: &str = "nemoclaw.nvidia.com/uid";
 pub const GENERATION: &str = "nemoclaw.nvidia.com/generation";
-pub const CREDENTIAL_SOURCE: &str = "nemoclaw.nvidia.com/credential-source";
+pub use nemoclaw_sdk::config::credential_metadata::CREDENTIAL_SOURCE;
 pub const CREDENTIAL: &str = "nemoclaw.nvidia.com/credential-env";
 pub const AGENT: &str = "nemoclaw.nvidia.com/agent";
 pub const AGENT_RUNTIME: &str = "nemoclaw.nvidia.com/agent-runtime";
@@ -110,7 +112,7 @@ fn provider_row(
     removing: bool,
 ) -> Result<Row, ObservationError> {
     let provider = response.provider.ok_or(ObservationError::Incomplete)?;
-    if crate::config::SearchProvider::from_profile(&provider.r#type).is_some() {
+    if nemoclaw_sdk::config::SearchProvider::from_profile(&provider.r#type).is_some() {
         return profile::provider_row(provider, name, removing);
     }
     if provider.r#type != format!("nemoclaw-inference-{name}")
@@ -150,7 +152,7 @@ fn provider_row(
         if !credential.is_empty() {
             return Err(ObservationError::BindingMismatch);
         }
-        crate::services::authentication::Source::parse(&source, &row["owner"], endpoint)?;
+        nemoclaw_sdk::services::authentication::Source::parse(&source, &row["owner"], endpoint)?;
     }
     row.insert("credential_source".into(), source);
     row.insert("endpoint".into(), endpoint.clone());
@@ -255,5 +257,3 @@ pub fn verify_identity(expected: &Row, observed: &Row) -> Result<(), Observation
     Ok(())
 }
 mod probes;
-
-pub(crate) mod credential_metadata;

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use nemoclaw_e2e::openshell::Fixture;
-use nemoclaw_sdk::{backend::Backend, compile, config::Document, openshell::OpenShell};
+use nemoclaw_provider::openshell::OpenShell;
+use nemoclaw_sdk::{backend::Backend, compile, config::Document};
 use std::{collections::BTreeMap, sync::Arc};
 
 #[tokio::test]
@@ -15,7 +16,7 @@ async fn health_reads_the_owned_host_without_generation_and_preserves_busy_readi
     *doc.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
     let client = OpenShell::connect(
         &doc.spec.gateway,
-        Arc::new(nemoclaw_sdk::openshell::EnvironmentSecrets),
+        Arc::new(nemoclaw_sdk::EnvironmentSecrets),
     )
     .unwrap();
     let generations = ["workspace", "provider", "sandbox"]

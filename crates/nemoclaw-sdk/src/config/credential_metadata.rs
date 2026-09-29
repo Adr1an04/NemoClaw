@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-use super::CREDENTIAL_SOURCE;
+pub const CREDENTIAL_SOURCE: &str = "nemoclaw.nvidia.com/credential-source";
 use crate::ObservationError;
 use std::collections::HashMap;
 
@@ -9,7 +9,7 @@ use std::collections::HashMap;
 const PART_BYTES: usize = 8192;
 const MAX_PARTS: usize = 127;
 
-pub(crate) fn pack(mut source: &str) -> Result<HashMap<String, String>, ObservationError> {
+pub fn pack(mut source: &str) -> Result<HashMap<String, String>, ObservationError> {
     let mut result = HashMap::new();
     if source.is_empty() {
         return Ok(result);
@@ -31,7 +31,7 @@ pub(crate) fn pack(mut source: &str) -> Result<HashMap<String, String>, Observat
     Ok(result)
 }
 
-pub(crate) fn unpack(values: &HashMap<String, String>) -> Result<String, ObservationError> {
+pub fn unpack(values: &HashMap<String, String>) -> Result<String, ObservationError> {
     let owned = values
         .keys()
         .filter(|key| key.starts_with(CREDENTIAL_SOURCE))

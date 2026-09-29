@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::openshell::{EnvironmentSecrets, OpenShell};
 use crate::{Backend, Definition, Mutation, ResourceAdapter, Row};
 use async_trait::async_trait;
 use nemoclaw_sdk::{
     ObservationError,
     config::{Credential, Gateway, TLS},
     docker::Connections,
-    openshell::{EnvironmentSecrets, OpenShell},
     services::BackendRegistry,
 };
 use serde::{Deserialize, Serialize};

@@ -126,7 +126,7 @@ fn loaded_policy_accepts_only_the_runtime_log_directory_enrichment() {
     let profile = inference_profile(
         "local",
         "http://172.30.122.1:18899/v1",
-        crate::config::InferenceProviderKind::Openai,
+        nemoclaw_sdk::config::InferenceProviderKind::Openai,
         false,
     )
     .unwrap();
@@ -198,7 +198,7 @@ fn sparse_filesystem_policy_accepts_proxy_baseline_but_rejects_other_drift() {
     let profile = inference_profile(
         "inference",
         "https://example.com/v1",
-        crate::config::InferenceProviderKind::Openai,
+        nemoclaw_sdk::config::InferenceProviderKind::Openai,
         false,
     )
     .unwrap();

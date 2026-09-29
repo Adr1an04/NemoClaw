@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
-use crate::config::Gateway;
+use nemoclaw_sdk::config::Gateway;
 use openshell_sdk::{EdgeAuthInterceptor, OpenShellClient};
 use std::{sync::Arc, time::Duration};
 use tonic::{
@@ -10,18 +10,6 @@ use tonic::{
     transport::{Certificate, Channel, ClientTlsConfig, Identity},
 };
 
-pub trait Secrets: Send + Sync {
-    fn resolve(&self, reference: &str) -> Result<String, ObservationError>;
-}
-pub struct EnvironmentSecrets;
-impl Secrets for EnvironmentSecrets {
-    fn resolve(&self, reference: &str) -> Result<String, ObservationError> {
-        std::env::var(reference)
-            .ok()
-            .filter(|v| !v.is_empty())
-            .ok_or(ObservationError::Authentication)
-    }
-}
 #[derive(Clone)]
 pub struct OpenShell {
     pub(super) client: Arc<OpenShellClient>,
@@ -31,7 +19,7 @@ impl OpenShell {
     /// Configure a lazy channel without network mutation or automatic RPC retry.
     /// Secret references are resolved locally; raw credentials never enter rows.
     pub fn connect(gateway: &Gateway, secrets: Arc<dyn Secrets>) -> Result<Self, ObservationError> {
-        crate::config::validate_endpoint(gateway.endpoint(), true)
+        nemoclaw_sdk::config::validate_endpoint(gateway.endpoint(), true)
             .map_err(|_| ObservationError::Query)?;
         if gateway.endpoint().starts_with("http:")
             && (gateway.credential().is_some() || gateway.tls().is_some())

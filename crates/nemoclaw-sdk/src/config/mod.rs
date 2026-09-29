@@ -3,9 +3,12 @@
 
 mod agent_inference;
 pub(crate) mod constraints;
+#[doc(hidden)]
+pub mod credential_metadata;
 mod execution;
 pub(crate) mod integration_policy;
 mod integrations;
+pub use integration_policy::search_policy;
 pub use integrations::*;
 mod inference;
 mod providers;
@@ -32,7 +35,7 @@ pub(crate) mod validation;
 use sha2::{Digest, Sha256};
 use std::{fmt, io::Read};
 pub use types::*;
-pub use validation::{is_fabric_harness, validate_endpoint};
+pub use validation::{is_fabric_harness, valid_name, validate_endpoint};
 
 pub const API_VERSION: &str = "nemoclaw.nvidia.com/v1alpha1";
 pub const MAX_DOCUMENT_BYTES: u64 = 1 << 20;
@@ -285,13 +288,13 @@ impl Gateway {
         self.as_managed()
             .ok_or(ConfigError::new("operation requires a managed gateway"))
     }
-    pub(crate) fn credential(&self) -> Option<&Credential> {
+    pub fn credential(&self) -> Option<&Credential> {
         match self {
             Self::Managed(_) => None,
             Self::External(gateway) => gateway.credential.as_ref(),
         }
     }
-    pub(crate) fn tls(&self) -> Option<&TLS> {
+    pub fn tls(&self) -> Option<&TLS> {
         match self {
             Self::Managed(_) => None,
             Self::External(gateway) => gateway.tls.as_ref(),

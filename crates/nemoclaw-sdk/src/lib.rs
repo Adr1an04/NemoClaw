@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Programmatic desired-state contracts shared by NemoClaw consumers.
+//!
+//! Backend mutation belongs to the provider, outside the SDK API:
+//!
+//! ```compile_fail
+//! use nemoclaw_sdk::openshell::OpenShell;
+//! let _ = OpenShell::connect;
+//! ```
 
 use std::fmt;
 
@@ -136,7 +143,9 @@ pub mod config;
 mod error;
 mod health;
 pub use health::{RuntimeHealth, SandboxHealth};
-pub mod openshell;
+mod secrets;
+pub use secrets::{EnvironmentSecrets, Secrets};
+mod gateway_observation;
 #[doc(hidden)]
 pub mod services;
 mod state;

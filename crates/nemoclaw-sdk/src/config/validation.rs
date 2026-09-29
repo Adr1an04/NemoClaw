@@ -198,6 +198,6 @@ impl Document {
     }
 }
 
-pub(crate) fn valid_name(name: &str) -> bool {
+pub fn valid_name(name: &str) -> bool {
     schema::validate_property("Metadata", "name", &name).is_ok()
 }

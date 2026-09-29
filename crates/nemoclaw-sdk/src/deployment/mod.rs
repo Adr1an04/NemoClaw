@@ -14,12 +14,11 @@ pub use reporting::{
 mod runtime;
 mod timing;
 use crate::{
-    CancellationToken, Error,
+    CancellationToken, EnvironmentSecrets, Error, Secrets,
     backend::Row,
     bundle::Bundle,
     compile::{self, Target},
     config::{Credential, Document},
-    openshell::{EnvironmentSecrets, Secrets},
     state::{Record, StateBinding, Store, atomic_write, save_json},
 };
 use plan::{Plan, check_destroy_plan, check_plan};

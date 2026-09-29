@@ -202,11 +202,10 @@ fn hosted_hermes_scenario_rejects_legacy_export_and_preserves_authored_intent() 
 
 #[cfg(target_os = "linux")]
 mod live {
+    use nemoclaw_provider::openshell::{EnvironmentSecrets, OpenShell};
     use nemoclaw_sdk::{
-        CancellationToken, Change, Deployment, OperationResult, Outcome,
-        backend::Row,
+        CancellationToken, Change, Deployment, OperationResult, Outcome, backend::Row,
         config::Document,
-        openshell::{EnvironmentSecrets, OpenShell},
     };
     use serde_json::Value;
     use std::{

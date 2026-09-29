@@ -67,36 +67,44 @@ fn declared_openshell_clients_match_the_artifact_revision() {
         String::from_utf8_lossy(&output.stderr)
     );
     let metadata: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    let package = metadata["packages"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|package| package["name"] == env!("CARGO_PKG_NAME"))
-        .unwrap();
-    for name in ["openshell-core", "openshell-policy", "openshell-sdk"] {
-        let dependency = package["dependencies"]
+    for (owner, clients) in [
+        ("nemoclaw-sdk", &["openshell-core", "openshell-policy"][..]),
+        (
+            "nemoclaw-provider",
+            &["openshell-core", "openshell-policy", "openshell-sdk"][..],
+        ),
+    ] {
+        let package = metadata["packages"]
             .as_array()
             .unwrap()
             .iter()
-            .find(|dependency| dependency["name"] == name)
+            .find(|package| package["name"] == owner)
             .unwrap();
-        let source = url::Url::parse(
-            dependency["source"]
-                .as_str()
+        for &name in clients {
+            let dependency = package["dependencies"]
+                .as_array()
                 .unwrap()
-                .strip_prefix("git+")
-                .unwrap(),
-        )
-        .unwrap();
-        let revision = source
-            .query_pairs()
-            .find(|(key, _)| key == "rev")
-            .map(|(_, value)| value.into_owned());
-        assert_eq!(
-            revision.as_deref(),
-            pins["openshellRevision"].as_str(),
-            "{name}"
-        );
+                .iter()
+                .find(|dependency| dependency["name"] == name)
+                .unwrap();
+            let source = url::Url::parse(
+                dependency["source"]
+                    .as_str()
+                    .unwrap()
+                    .strip_prefix("git+")
+                    .unwrap(),
+            )
+            .unwrap();
+            let revision = source
+                .query_pairs()
+                .find(|(key, _)| key == "rev")
+                .map(|(_, value)| value.into_owned());
+            assert_eq!(
+                revision.as_deref(),
+                pins["openshellRevision"].as_str(),
+                "{owner}: {name}"
+            );
+        }
     }
 }
 

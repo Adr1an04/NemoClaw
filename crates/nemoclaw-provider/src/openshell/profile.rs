@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 use super::*;
-use crate::config::SearchProvider;
+use nemoclaw_sdk::config::SearchProvider;
 
 fn definition(provider: SearchProvider, owner: &str, generation: &str) -> proto::ProviderProfile {
-    let rule = crate::config::integration_policy::search_policy(provider);
+    let rule = nemoclaw_sdk::config::search_policy(provider);
     let name = provider.profile();
     let policy = openshell_policy::parse_sandbox_policy(
         &serde_json::json!({
@@ -55,9 +55,9 @@ fn native_definition(want: &Row) -> Result<proto::ProviderProfile, ObservationEr
         name,
         &want["endpoint"],
         if want.get("provider_type").is_some_and(|s| s == "anthropic") {
-            crate::config::InferenceProviderKind::Anthropic
+            nemoclaw_sdk::config::InferenceProviderKind::Anthropic
         } else {
-            crate::config::InferenceProviderKind::Openai
+            nemoclaw_sdk::config::InferenceProviderKind::Openai
         },
         authenticated,
     )?;
@@ -174,7 +174,7 @@ pub(super) fn provider_row(
         .filter(|s| !s.is_empty())
         .ok_or(ObservationError::Incomplete)?
         .clone();
-    if name != crate::config::search_provider_name(search, &credential) {
+    if name != nemoclaw_sdk::config::search_provider_name(search, &credential) {
         return Err(ObservationError::BindingMismatch);
     }
     let mut result = base(provider.metadata, name, removing)?;

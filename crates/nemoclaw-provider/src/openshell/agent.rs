@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::backend::Row;
+use nemoclaw_sdk::backend::Row;
 
 /// Fixed bridge interface packaged by image/fabric/Dockerfile.
 pub(super) fn fabric_command(arguments: &[&str]) -> Vec<String> {

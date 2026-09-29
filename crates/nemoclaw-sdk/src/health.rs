@@ -23,7 +23,7 @@ pub struct SandboxHealth {
 }
 
 impl RuntimeHealth {
-    pub(crate) fn decode(bytes: &[u8]) -> Result<Self, crate::Error> {
+    pub fn decode(bytes: &[u8]) -> Result<Self, crate::Error> {
         let health: Self = serde_json::from_slice(bytes).map_err(|_| {
             crate::Error::Conflict("invalid Fabric health response; resources retained")
         })?;

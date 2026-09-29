@@ -169,14 +169,14 @@ Other lifecycle operations leave this list empty.
 OpenTofu schedules the provider's sandbox completion observation; the SDK reads its recorded result without a second health request.
 
 `Error::Health { health }` retains the observation when supported health cannot establish readiness.
-Socket failures inside the host bridge also return `Error::Health`, with `health_transport_error` or `health_transport_timeout`.
+The pinned image reports unsupported health locally because its Fabric version has no public health operation.
 Outer OpenShell transport failures and invalid reports use the existing error variants without copying raw diagnostics.
 No health failure deletes deployment resources.
 The compatibility behavior for the current Fabric pin and required agent image is described in [apply health](usage.md#fabric-health-during-apply).
 
 ## Resolve Credentials in an Application
 
-`with_secrets` supplies an application-owned `openshell::Secrets` implementation; the default resolves nonempty environment variables.
+`with_secrets` supplies an application-owned `Secrets` implementation; the default resolves nonempty environment variables.
 The resolver receives reference names, including gateway TLS references whose values must be file paths.
 Resolved values are supplied to the SDK and, as required, its provider subprocess.
 OpenTofu initialization and JSON inspection do not resolve deployment credentials.
@@ -186,7 +186,7 @@ Keep them out of application logs and return typed authentication errors without
 This resolver adapts values already loaded by the application:
 
 ```rust
-use nemoclaw_sdk::{ObservationError, openshell::Secrets};
+use nemoclaw_sdk::{ObservationError, Secrets};
 use std::collections::BTreeMap;
 
 struct ApplicationSecrets(BTreeMap<String, String>);

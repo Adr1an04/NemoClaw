@@ -584,7 +584,8 @@ fn tavily_rejects_collisions_with_managed_profile_and_provider_names() {
     let mut value = input();
     value["spec"]["sandboxes"][0]["integrations"]["search"]["provider"] = json!("tavily");
     let mut policy =
-        openshell_policy::sandbox_policy_to_json_value(&nemoclaw_sdk::openshell::policy()).unwrap();
+        openshell_policy::sandbox_policy_to_json_value(&nemoclaw_sdk::config::isolated_policy())
+            .unwrap();
     policy["network_policies"] = json!({"custom-search": {
             "name":"custom-search",
             "endpoints":[{"host":"search.example.com","port":443}],

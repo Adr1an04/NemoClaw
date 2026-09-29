@@ -5,8 +5,8 @@ mod create;
 mod update;
 
 use super::*;
-use crate::backend::{Backend, Mutation, OpenShellLifecycle, openshell_lifecycle};
 use async_trait::async_trait;
+use nemoclaw_sdk::backend::{Backend, Mutation, OpenShellLifecycle, openshell_lifecycle};
 use std::{collections::HashMap, time::Duration};
 
 fn value<'a>(row: &'a Row, field: &str) -> &'a str {
@@ -21,14 +21,14 @@ fn labels(want: &Row) -> HashMap<String, String> {
 }
 impl OpenShell {
     async fn provider(&self, want: &Row) -> Result<proto::Provider, ObservationError> {
-        let search = crate::config::SearchProvider::from_name(value(want, "provider_type"));
+        let search = nemoclaw_sdk::config::SearchProvider::from_name(value(want, "provider_type"));
         let (kind, endpoint_key, secret_key) = match value(want, "provider_type") {
             "" => ("openai", "OPENAI_BASE_URL", "OPENAI_API_KEY"),
             "anthropic" => ("anthropic", "ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY"),
             "brave" | "tavily"
                 if search.is_some_and(|provider| {
                     value(want, "name")
-                        == crate::config::search_provider_name(
+                        == nemoclaw_sdk::config::search_provider_name(
                             provider,
                             value(want, "credential_env"),
                         )
@@ -75,7 +75,7 @@ impl OpenShell {
             if !value(want, "credential_env").is_empty() {
                 return Err(ObservationError::BindingMismatch);
             }
-            crate::services::authentication::Source::parse(
+            nemoclaw_sdk::services::authentication::Source::parse(
                 source,
                 value(want, "owner"),
                 value(want, "endpoint"),
@@ -267,7 +267,7 @@ impl Backend for OpenShell {
         kind: &str,
         desired: &Row,
         prior: Option<&Row>,
-    ) -> Result<(), crate::Error> {
+    ) -> Result<(), nemoclaw_sdk::Error> {
         if kind == "agent_configuration" {
             return self.plan_configuration(desired).await;
         }
@@ -311,7 +311,7 @@ impl Backend for OpenShell {
             verify_identity(prior, row)?;
             self.check_sandbox_phase(row)
                 .await
-                .map_err(crate::Error::into_observation)?;
+                .map_err(nemoclaw_sdk::Error::into_observation)?;
         }
         Ok(observed)
     }
@@ -371,7 +371,7 @@ impl Backend for OpenShell {
 #[cfg(test)]
 mod search_tests {
     use super::*;
-    use crate::config::{Gateway, SearchProvider};
+    use nemoclaw_sdk::config::{Gateway, SearchProvider};
     use std::sync::Arc;
 
     struct SearchSecrets;
@@ -391,7 +391,7 @@ mod search_tests {
         *gateway.endpoint_mut() = "http://127.0.0.1:1".into();
         let client = OpenShell::connect(&gateway, Arc::new(SearchSecrets)).unwrap();
         for provider in [SearchProvider::Brave, SearchProvider::Tavily] {
-            let name = crate::config::search_provider_name(provider, "SEARCH_KEY");
+            let name = nemoclaw_sdk::config::search_provider_name(provider, "SEARCH_KEY");
             let want: Row = [
                 ("name", name.as_str()),
                 ("workspace", "workspace"),

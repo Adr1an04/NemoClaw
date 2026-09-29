@@ -22,7 +22,7 @@ The image workflow qualifies the installed native adapters against owned local i
 
 `fabric/fabric.py` retains the deployment host: the pinned Fabric SDK has no process host for configure, unchanged apply, and invocation across OpenShell exec calls.
 The host delegates configuration and runtime operations to Fabric; its health command reports unsupported because the pinned SDK has no health API.
-The [SDK command helper](../crates/nemoclaw-sdk/src/openshell/agent.rs) retains the fixed launch interface for this packaged bridge.
+The [provider command helper](../crates/nemoclaw-provider/src/openshell/agent.rs) retains the fixed launch interface for this packaged bridge.
 
 [`build_fabric.py`](build_fabric.py) builds local images, runs Fabric discovery in each installed environment without starting an adapter, and attaches the returned snapshot as `io.nemoclaw.fabric.catalog`.
 It selects installed-package records using Fabric provenance and preserves the descriptor contents.

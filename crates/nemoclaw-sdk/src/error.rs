@@ -40,7 +40,7 @@ pub enum Error {
 }
 
 impl Error {
-    pub(crate) fn into_observation(self) -> crate::ObservationError {
+    pub fn into_observation(self) -> crate::ObservationError {
         match self {
             Self::Observation(error) => error,
             Self::SandboxStartup {

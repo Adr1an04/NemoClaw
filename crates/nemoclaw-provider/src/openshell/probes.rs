@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
-use crate::{CancellationToken, Error};
+use nemoclaw_sdk::{CancellationToken, Error};
 use std::time::Duration;
 
 const AGENT_READINESS_TIMEOUT: Duration = Duration::from_secs(300);
@@ -214,7 +214,7 @@ impl OpenShell {
     }
 
     /// Query the existing hosted Fabric runtime; never invoke an agent or model.
-    pub async fn health(&self, binding: &Row) -> Result<crate::RuntimeHealth, Error> {
+    pub async fn health(&self, binding: &Row) -> Result<nemoclaw_sdk::RuntimeHealth, Error> {
         self.health_for(binding, None).await
     }
 
@@ -222,7 +222,7 @@ impl OpenShell {
         &self,
         binding: &Row,
         agent: Option<&str>,
-    ) -> Result<crate::RuntimeHealth, Error> {
+    ) -> Result<nemoclaw_sdk::RuntimeHealth, Error> {
         let mut command = agent::fabric_command(&["health"]);
         command.extend(agent.map(String::from));
         let (exit, output) = self.exec_bound(binding, command, Row::new(), 10).await?;
@@ -231,7 +231,7 @@ impl OpenShell {
                 "Fabric health bridge unavailable; rebuild the agent image; resources retained",
             ));
         }
-        crate::RuntimeHealth::decode(&output)
+        nemoclaw_sdk::RuntimeHealth::decode(&output)
     }
 
     pub async fn inference_ready(&self, _binding: &Row) -> Result<(), Error> {

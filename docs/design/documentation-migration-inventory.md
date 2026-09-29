@@ -281,7 +281,7 @@ These references support the coverage column; owning guides provide the specific
 [state-store]: ../../crates/nemoclaw-sdk/src/state/mod.rs
 [teardown-implementation]: ../../crates/nemoclaw-sdk/src/deployment/runtime/teardown.rs
 [bundle-builder]: ../../crates/nemoclaw-build/src/lib.rs
-[gateway-probes]: ../../crates/nemoclaw-sdk/src/openshell/probes.rs
+[gateway-probes]: ../../crates/nemoclaw-provider/src/openshell/probes.rs
 [resource-management-tests]: ../../crates/nemoclaw-sdk/tests/resource_management.rs
 [openclaw-adapter]: https://github.com/NVIDIA/NemoClaw/blob/9146224da4/image/fabric/openclaw_adapter.py
 [hermes-adapter]: https://github.com/NVIDIA/NemoClaw/blob/9146224da4/image/fabric/hermes_adapter.py

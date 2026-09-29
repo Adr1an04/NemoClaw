@@ -539,7 +539,7 @@ async fn lifecycle_with_rejected_annotations(input: &str, reject_annotations: bo
         .unwrap()
         .is_empty();
     struct FixtureSecrets;
-    impl nemoclaw_sdk::openshell::Secrets for FixtureSecrets {
+    impl nemoclaw_sdk::Secrets for FixtureSecrets {
         fn resolve(&self, name: &str) -> Result<String, nemoclaw_sdk::ObservationError> {
             assert!(["NOUS_API_KEY", "SEARCH_KEY"].contains(&name));
             Ok("fixture-only-inference-key".into())
@@ -1003,7 +1003,7 @@ async fn readiness_and_observation_failures_retain_bindings_and_recover_without_
 #[ignore = "requires explicit verified NEMOCLAW_TEST_BUNDLE"]
 async fn destroy_does_not_require_the_inference_credential_or_rewrite_its_reference() {
     struct Credential;
-    impl nemoclaw_sdk::openshell::Secrets for Credential {
+    impl nemoclaw_sdk::Secrets for Credential {
         fn resolve(&self, name: &str) -> Result<String, nemoclaw_sdk::ObservationError> {
             assert_eq!(name, "NEMOCLAW_TEST_REMOVED_INFERENCE_KEY");
             Ok("fixture-inference-secret".into())
@@ -1054,7 +1054,7 @@ async fn destroy_does_not_require_the_inference_credential_or_rewrite_its_refere
 #[ignore = "requires explicit verified NEMOCLAW_TEST_BUNDLE"]
 async fn apply_preserves_bindings_without_generating_inference() {
     struct Secret;
-    impl nemoclaw_sdk::openshell::Secrets for Secret {
+    impl nemoclaw_sdk::Secrets for Secret {
         fn resolve(&self, reference: &str) -> Result<String, nemoclaw_sdk::ObservationError> {
             assert_eq!(reference, "MODEL_TOKEN");
             Ok("fixture-remote-model-token".into())

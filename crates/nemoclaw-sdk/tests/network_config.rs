@@ -125,7 +125,7 @@ fn explicit_policy_supports_tcp_rest_websocket_rpc_mcp_and_deny_all() {
         let document = parse(&value).unwrap_or_else(|e| panic!("{endpoint}: {e}"));
         let proto = document.spec.sandboxes[0].network.policy_proto().unwrap();
         assert!(
-            nemoclaw_sdk::openshell::policy_json(&proto).is_ok(),
+            nemoclaw_sdk::config::policy_json(&proto).is_ok(),
             "observation must retain {endpoint}"
         );
     }
@@ -133,7 +133,7 @@ fn explicit_policy_supports_tcp_rest_websocket_rpc_mcp_and_deny_all() {
     value["spec"]["sandboxes"][0]["network"]["policy"]["explicit"]["network_policies"] = json!({});
     let document = parse(&value).unwrap();
     assert!(
-        nemoclaw_sdk::openshell::policy_json(
+        nemoclaw_sdk::config::policy_json(
             &document.spec.sandboxes[0].network.policy_proto().unwrap()
         )
         .is_ok()

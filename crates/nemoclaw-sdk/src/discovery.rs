@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Bounded read-only observations shared by authoring and provider data sources.
+pub use crate::gateway_observation::{GatewayCapabilities, GatewayObservation};
 use crate::{config::ComputeDriver, docker::Connections, fabric_catalog::FabricCatalog};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -22,7 +23,7 @@ pub enum DiscoveryObservation {
     Hardware(crate::hardware_discovery::HardwareObservation),
     Fabric(crate::discovery::FabricObservation),
     Inference(crate::inference_discovery::EndpointObservation),
-    Gateway(crate::openshell::GatewayObservation),
+    Gateway(GatewayObservation),
     Service { ready: Option<bool>, source: String },
     Unresolved { category: String },
 }

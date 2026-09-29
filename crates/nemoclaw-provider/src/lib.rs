@@ -99,3 +99,6 @@ mod provider;
 mod readiness;
 mod sandbox_readiness;
 pub use provider::NemoClawProvider;
+
+/// OpenShell resource operations owned by this provider.
+pub mod openshell;

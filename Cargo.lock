@@ -2166,13 +2166,18 @@ name = "nemoclaw-provider"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "nemo-fabric-core",
  "nemoclaw-sdk",
+ "openshell-core",
+ "openshell-policy",
+ "openshell-sdk",
  "rustls",
  "serde",
  "serde_json",
  "tempfile",
  "tf-provider",
  "tokio",
+ "tonic",
 ]
 
 [[package]]
@@ -2218,7 +2223,6 @@ dependencies = [
  "nemoclaw-runtime",
  "openshell-core",
  "openshell-policy",
- "openshell-sdk",
  "process-wrap",
  "regex",
  "reqwest 0.13.5",
@@ -2236,7 +2240,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "toml",
- "tonic",
  "url",
  "widestring",
 ]
