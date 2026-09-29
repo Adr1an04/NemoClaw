@@ -18,3 +18,7 @@ Direct Docker Bake builds do not attach discovery metadata.
 2026-09-24: serialize canonical descriptor records and provenance without local adapter additions or native schema patches.
 The bundled snapshot offers provisional authoring choices; it does not establish installation, health, credentials, or inference readiness on a target.
 Regenerate it using the matching Fabric interpreter and `fabric/catalog.py --revision REVISION --source-sha256 CHECKSUM --output image/fabric/catalog.json`.
+
+[`qualify_native.py`](qualify_native.py) and [`hermes_security.py`](hermes_security.py) run in built images from the image workflow.
+Both came from NeMo Fabric's `tests/native/` at the pinned revision; their headers record the source and the 2026-09-28 move.
+They use only owned local processes and a simulated inference endpoint, so they do not establish external provider compatibility.
