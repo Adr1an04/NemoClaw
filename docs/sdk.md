@@ -64,7 +64,6 @@ They cover bundle verification and OpenTofu commands, including provider readine
 Download events contain the backend resource kind and name, requested image or model, optional layer ID, phase, and optional completed/total byte counts.
 Each event replaces the previous counts for that resource, artifact, and layer; counts are not increments.
 Provider downloads reach the callback through a local channel; updates can be dropped and never determine the operation result.
-Direct SDK calls to image or Ollama model operations can use `with_download_progress(resource, callback, future)` to report through the same callback type.
 Callbacks run synchronously; keep them short.
 A timed step reports when it returns, including cooperative cancellation; dropping its future does not emit a completed event.
 

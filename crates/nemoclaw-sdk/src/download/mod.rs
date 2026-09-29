@@ -42,7 +42,7 @@ tokio::task_local! { static CONTEXT: (String, Callback); }
 
 /// Report downloads performed by this future through an in-process callback.
 /// The callback should return promptly. Spawned tasks need their own scope.
-pub async fn with_download_progress<T>(
+pub(crate) async fn with_download_progress<T>(
     resource: String,
     callback: Callback,
     operation: impl Future<Output = T>,

@@ -9,6 +9,12 @@
 //! use nemoclaw_sdk::openshell::OpenShell;
 //! let _ = OpenShell::connect;
 //! ```
+//!
+//! Download callbacks are delivered through deployment progress:
+//!
+//! ```compile_fail
+//! use nemoclaw_sdk::with_download_progress;
+//! ```
 
 use std::fmt;
 
@@ -173,8 +179,7 @@ mod tofu_ui;
 
 mod download;
 pub use download::{
-    ByteProgress, DownloadPhase, DownloadProgress, with_download_progress,
-    with_provider_download_progress,
+    ByteProgress, DownloadPhase, DownloadProgress, with_provider_download_progress,
 };
 
 mod docker_compute;

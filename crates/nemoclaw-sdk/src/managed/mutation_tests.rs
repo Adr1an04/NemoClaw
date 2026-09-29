@@ -337,7 +337,7 @@ async fn gateway_failed_startup_and_explicit_recovery_keep_container_and_storage
 
 #[tokio::test]
 async fn image_pull_reports_layer_bytes_without_claiming_whole_image_percentage() {
-    use crate::{ByteProgress, DownloadPhase, Progress, with_download_progress};
+    use crate::{ByteProgress, DownloadPhase, Progress, download::with_download_progress};
     let fixture = Fixture::start(|request| {
         if request.method == "POST" && request.path.starts_with("/images/create") {
             Some((200, b"{\"status\":\"Downloading\",\"id\":\"abcdef\",\"progressDetail\":{\"current\":50,\"total\":100}}\n{\"status\":\"Extracting\",\"id\":\"abcdef\",\"progressDetail\":{\"current\":80,\"total\":100}}\n".to_vec()))
