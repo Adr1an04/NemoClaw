@@ -418,7 +418,7 @@ fn tavily_preserves_openclaw_and_hermes_intent_and_credential_references() {
         assert!(policy["network_policies"]["nemoclaw-brave"].is_null());
         assert_eq!(
             policy["network_policies"]["nemoclaw-tavily"]["binaries"],
-            json!([{"path":"/usr/local/bin/node"},{"path":"/usr/local/bin/python3.13"}])
+            json!([{"path":"/usr/local/bin/node"},{"path":"/usr/local/bin/python3"}])
         );
         let endpoint = &policy["network_policies"]["nemoclaw-tavily"]["endpoints"][0];
         assert_eq!(endpoint["host"], "api.tavily.com");

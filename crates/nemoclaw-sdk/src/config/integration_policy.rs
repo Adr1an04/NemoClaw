@@ -42,11 +42,10 @@ impl Sandbox {
 }
 
 pub(crate) fn search_policy(provider: SearchProvider) -> super::PolicyRule {
-    let (host, rules, python) = match provider {
+    let (host, rules) = match provider {
         SearchProvider::Brave => (
             "api.search.brave.com",
             json!([{"allow":{"method":"GET","path":"/res/v1/web/search"}}]),
-            "/usr/local/bin/python3.14",
         ),
         SearchProvider::Tavily => (
             "api.tavily.com",
@@ -54,7 +53,6 @@ pub(crate) fn search_policy(provider: SearchProvider) -> super::PolicyRule {
                 {"allow":{"method":"POST","path":"/search"}},
                 {"allow":{"method":"POST","path":"/extract"}}
             ]),
-            "/usr/local/bin/python3.13",
         ),
     };
     let endpoint = json!({
@@ -63,7 +61,7 @@ pub(crate) fn search_policy(provider: SearchProvider) -> super::PolicyRule {
     });
     serde_json::from_value(json!({
         "name": provider.profile(), "endpoints":[endpoint],
-        "binaries":[{"path":"/usr/local/bin/node"},{"path":python}]
+        "binaries":[{"path":"/usr/local/bin/node"},{"path":"/usr/local/bin/python3"}]
     }))
     .expect("typed search policy")
 }

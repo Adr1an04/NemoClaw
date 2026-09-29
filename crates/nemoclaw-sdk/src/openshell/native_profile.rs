@@ -51,10 +51,9 @@ pub fn definition(
                 "name": id,
                 "endpoints": [{"host": host, "port": port, "path": path,
                     "protocol": "rest", "access": "full", "allowed_ips": allowed_ips}],
-                // Match the real executables behind the shipped virtualenv launchers.
+                // OpenShell resolves interpreter symlinks inside the sandbox before enforcement.
                 "binaries": [
-                    {"path": "/usr/local/bin/python3.14"},
-                    {"path": "/usr/local/bin/python3.13"},
+                    {"path": "/usr/local/bin/python3"},
                     {"path": "/usr/local/bin/node"}
                 ]
             }}
@@ -136,7 +135,7 @@ mod tests {
     }
 
     #[test]
-    fn inference_grants_the_executables_observed_for_shipped_python_runtimes() {
+    fn inference_grants_stable_interpreters_for_openshell_to_resolve() {
         let profile = definition(
             "local",
             "http://172.20.0.1:11436/v1",
@@ -144,25 +143,13 @@ mod tests {
             false,
         )
         .unwrap();
-        // OpenShell observes /proc/<pid>/exe, not the virtualenv launch symlink.
-        for executable in [
-            "/usr/local/bin/python3.14",
-            "/usr/local/bin/python3.13",
-            "/usr/local/bin/node",
-        ] {
-            assert!(
-                profile
-                    .binaries
-                    .iter()
-                    .any(|binary| binary.path == executable),
-                "missing {executable}"
-            );
-        }
-        assert!(
-            !profile
+        assert_eq!(
+            profile
                 .binaries
                 .iter()
-                .any(|binary| binary.path.contains('*') || binary.path == "/bin/sh")
+                .map(|binary| binary.path.as_str())
+                .collect::<Vec<_>>(),
+            ["/usr/local/bin/python3", "/usr/local/bin/node"],
         );
         assert_eq!(profile.endpoints.len(), 1);
         assert_eq!(profile.endpoints[0].allowed_ips, ["172.20.0.1/32"]);
