@@ -262,3 +262,32 @@ Failures also retain resources for diagnosis; the test prints the owned gateway 
 Inspect those resources with the original documents before choosing cleanup or a separate fresh run; rerunning the same inputs is refused.
 Use the separate [gateway recovery test](#docker-gateway-recovery) to qualify the bundled OpenTofu path.
 This test does not qualify imported provider profiles, Fabric readiness, or agent replies.
+
+## Provider Profile Revisions
+
+The provider's `profile_revision::imported_profile_revisions_survive_repeated_reads_and_gateway_restart` test requires one fresh owned managed Docker deployment document and the pinned local images described under [gateway isolation](#docker-gateway-isolation).
+Use a sandbox image that also provides `/usr/local/bin/python3` and `/usr/local/bin/node`, which the imported inference profiles authorize.
+The test creates its own workspace, five provider profiles and registrations, and a `/bin/sleep` sandbox.
+It covers authenticated OpenAI and Anthropic profiles, an unauthenticated OpenAI profile, and Brave and Tavily search profiles.
+
+The test uses synthetic credentials held in memory and registered with its gateway; it makes no inference or search requests.
+To read the sandbox-only provider environment RPC, it reads that sandbox's issued token from its own gateway container into memory without logging or writing a copy.
+A successful run deletes the sandbox, provider registrations, profiles, and gateway process, retaining the workspace, gateway storage, initializer, and bridge.
+Retained gateway storage contains signing and encryption keys.
+The test creates no OpenTofu state; keep the input document to identify its resources, and use fresh inputs for another run.
+Failures retain resources for diagnosis; inspect only the printed owned gateway and its sandbox before cleanup.
+The [manual retained-storage cleanup procedure](../state.md#deletion-and-retention) remains **TBD**.
+
+From the repository root, with an absolute document path and the local sandbox image's actual digest:
+
+```sh
+NEMOCLAW_TEST_GATEWAY_DOCUMENT=/absolute/path/to/owned-deployment.yaml \
+NEMOCLAW_TEST_GATEWAY_SANDBOX_IMAGE=repository@sha256:REPLACE_WITH_LOCAL_IMAGE_DIGEST \
+  cargo test -p nemoclaw-provider --test managed_gateway_live \
+    profile_revision::imported_profile_revisions_survive_repeated_reads_and_gateway_restart -- --ignored --exact --nocapture
+```
+
+The sandbox must reach Ready with all five providers attached.
+All 64 environment reads before restart and all 64 afterward must return the same revision.
+Unchanged profile reconciliation must preserve identities, and the sandbox must retain its identity and Ready phase after the gateway restarts.
+This test qualifies profile stability and observation against the pinned gateway; it does not run a Fabric adapter or request an agent reply.
