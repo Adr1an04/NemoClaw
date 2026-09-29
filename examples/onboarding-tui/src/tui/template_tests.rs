@@ -109,7 +109,8 @@ fn exercise_templates(rename: bool) {
             "{} lost template settings during loading",
             path.display()
         );
-        let mut wizard = Wizard::new(capabilities, draft);
+        // The template corpus includes managed Podman, which requires a Linux host.
+        let mut wizard = Wizard::for_host(capabilities, draft, "linux");
         finish(&mut wizard, path, rename);
         let reviewed = wizard.draft().review().unwrap();
         let output = directory.path().join(format!("example-{index}.yaml"));

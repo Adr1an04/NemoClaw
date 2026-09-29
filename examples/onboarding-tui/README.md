@@ -22,6 +22,8 @@ nemoclaw onboard examples/onboarding/openclaw.yaml --output my-deployment.yaml
 ```
 
 Omit the template to use the built-in defaults.
+Those defaults come from a partial template in this example. It leaves the six original guided
+fields open and supplies preset values for the rest of the document.
 The template's choices are preselected; Enter accepts an answer.
 The questionnaire chooses an unresolved question whose dependencies are resolved, preferring questions that constrain more remaining choices.
 It skips inactive fields and choices with only one supported answer.
