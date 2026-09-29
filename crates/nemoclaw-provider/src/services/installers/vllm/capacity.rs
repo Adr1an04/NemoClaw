@@ -83,7 +83,7 @@ impl Engine {
                                 ),
                             )?;
                             verify_stat(
-                                &crate::snapshot::VerifiedFile {
+                                &nemoclaw_runtime::snapshot::VerifiedFile {
                                     file: file.clone(),
                                     modified,
                                 },
@@ -128,7 +128,7 @@ pub(crate) fn regular_stat(stat: &bollard::container::PathStatResponse) -> bool 
 }
 
 pub(super) fn verify_stat(
-    file: &crate::snapshot::VerifiedFile,
+    file: &nemoclaw_runtime::snapshot::VerifiedFile,
     stat: &bollard::container::PathStatResponse,
 ) -> Result<(), Error> {
     let modified = time::OffsetDateTime::parse(

@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+use super::GATEWAY_STORAGE_KIND;
 use super::{GATEWAY_KIND, Spec, Storage};
 use crate::{
     Error, ObservationError,
     backend::{Backend, Mutation, Row},
     docker::Engine,
 };
-pub const GATEWAY_STORAGE_KIND: &str = "gateway_storage";
 pub struct ManagedBackend {
     engine: Engine,
     storage_kind: Option<&'static str>,
@@ -52,9 +52,9 @@ impl ManagedBackend {
             spec.validate()?;
             let engine = &self.engine;
             if apply {
-                Some(spec.ensure(engine, id).await?)
+                Some(super::ensure_storage(&spec, engine, id).await?)
             } else {
-                spec.observe(engine, id).await?
+                super::observe_storage(&spec, engine, id).await?
             }
         } else {
             let spec = configured_specification(kind, row)?;
@@ -135,7 +135,7 @@ impl Backend for ManagedBackend {
             return Ok(());
         }
         let encoded = desired.get("spec").ok_or(ObservationError::Incomplete)?;
-        crate::services::validate_resource_spec(kind, encoded)?;
+        nemoclaw_sdk::services::validate_resource_spec(kind, encoded)?;
         let want = configured_specification(kind, desired)?;
         let old = prior
             .map(|row| specification(kind, row.get("spec").ok_or(ObservationError::Incomplete)?))

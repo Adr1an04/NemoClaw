@@ -4,39 +4,8 @@ use super::Engine;
 use crate::Error;
 
 impl Engine {
-    pub(super) fn validate_ssh(endpoint: &str) -> Result<(), Error> {
-        let invalid = || {
-            Error::Conflict(
-                "SSH engine requires ssh://[user@]host[:port] without passwords, paths or options",
-            )
-        };
-        let url = url::Url::parse(endpoint).map_err(|_| invalid())?;
-        let safe_name = |name: &str| {
-            !name.starts_with('-')
-                && name
-                    .bytes()
-                    .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
-        };
-        if endpoint
-            .bytes()
-            .any(|c| c.is_ascii_whitespace() || c.is_ascii_control() || c == b'%')
-            || url.password().is_some()
-            || url.query().is_some()
-            || url.fragment().is_some()
-            || !url.path().is_empty()
-            || !safe_name(url.username())
-            || url
-                .host_str()
-                .is_none_or(|host| !safe_name(host) || host.is_empty())
-            || url.port() == Some(0)
-        {
-            return Err(invalid());
-        }
-        Ok(())
-    }
-
     pub(super) fn connect_ssh(endpoint: &str) -> Result<Self, Error> {
-        Self::validate_ssh(endpoint)?;
+        crate::config::validate_engine_endpoint(endpoint)?;
         #[cfg(unix)]
         {
             let target = endpoint.to_owned();

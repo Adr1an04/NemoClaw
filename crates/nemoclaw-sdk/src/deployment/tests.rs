@@ -448,9 +448,10 @@ async fn managed_gateway_plan_apply_noop_destroy_and_recovery_use_real_opentofu(
         .unwrap()
         .unwrap_or(Record::new(document.clone()).unwrap());
     assert_eq!(record.document.metadata.uid, document.metadata.uid);
-    let engine =
-        crate::docker::Engine::connect(&document.spec.gateway.as_managed().unwrap().engine)
-            .unwrap();
+    let engine = nemoclaw_provider::docker::Engine::connect(
+        &document.spec.gateway.as_managed().unwrap().engine,
+    )
+    .unwrap();
     let name = format!("{}-gateway", document.workspace());
     let container_before = engine.container(&name).await.unwrap().map(|c| c.id);
     let volume_before = engine
@@ -513,11 +514,17 @@ async fn managed_gateway_plan_apply_noop_destroy_and_recovery_use_real_opentofu(
     }
     drop(stage);
     if docker {
+        let api = bollard::Docker::connect_with_unix(
+            engine.endpoint(),
+            120,
+            bollard::API_DEFAULT_VERSION,
+        )
+        .unwrap();
         for remove in [false, true] {
             let old = engine.container(&name).await.unwrap().unwrap().id.unwrap();
-            engine.api.stop_container(&old, None).await.unwrap();
+            api.stop_container(&old, None).await.unwrap();
             if remove {
-                engine.api.remove_container(&old, None).await.unwrap();
+                api.remove_container(&old, None).await.unwrap();
             }
             deployment
                 .runtime_stage(&bundle, &store, &document, &mut record, true, &cancel)
@@ -579,7 +586,11 @@ async fn managed_gateway_plan_apply_noop_destroy_and_recovery_use_real_opentofu(
         let mut replacement = key.clone();
         replacement[0] ^= 1;
         engine
-            .write_credential_key(&helper, &data_path, &replacement)
+            .write_files(
+                &helper,
+                &format!("{data_path}/state/openshell/gateway/credentials"),
+                &[("key-encryption-key.bin", &replacement, 0o600)],
+            )
             .await
             .unwrap();
         assert!(
@@ -590,7 +601,11 @@ async fn managed_gateway_plan_apply_noop_destroy_and_recovery_use_real_opentofu(
         );
         assert_eq!(fs::read(state_path).unwrap(), prior);
         engine
-            .write_credential_key(&helper, &data_path, &key)
+            .write_files(
+                &helper,
+                &format!("{data_path}/state/openshell/gateway/credentials"),
+                &[("key-encryption-key.bin", &key, 0o600)],
+            )
             .await
             .unwrap();
         deployment

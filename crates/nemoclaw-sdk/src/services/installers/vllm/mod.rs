@@ -11,15 +11,9 @@ pub use crate::services::placement::{ServicePlacement, ServicePublication};
 pub use config::{Memory, Model, Service, ServiceAuthentication, Serving};
 pub use container::{ServiceContainer, ServiceIpc};
 pub use hardware_profile::HardwareProfile;
-pub(crate) use hardware_profile::MemoryArchitecture;
 #[cfg(test)]
 use nemoclaw_runtime::vllm::arguments;
 pub use service_hardware::{DedicatedHardware, ServiceHardware, VllmLaunchMode};
-pub(crate) mod artifacts;
-pub use artifacts::RuntimeStatus;
-pub(crate) mod capacity;
-pub use nemoclaw_runtime::vllm::hardware_capacity;
-pub use nemoclaw_runtime::vllm::recipes;
 pub(crate) mod schema;
 #[cfg(test)]
 mod tests;
@@ -32,10 +26,10 @@ use crate::{
 };
 use std::collections::BTreeMap;
 
-pub(crate) const SERVICE_KIND: &str = "inference_service";
-pub(crate) const STORAGE_KIND: &str = "inference_storage";
+pub const SERVICE_KIND: &str = "inference_service";
+pub const STORAGE_KIND: &str = "inference_storage";
 
-pub(crate) fn configured_service(spec: &Spec) -> Result<nemoclaw_runtime::vllm::Service, Error> {
+pub fn configured_service(spec: &Spec) -> Result<nemoclaw_runtime::vllm::Service, Error> {
     let configuration = spec.runtime_configuration()?;
     match nemoclaw_runtime::RuntimeSpec::decode(configuration)? {
         nemoclaw_runtime::RuntimeSpec::Vllm(service) => Ok(*service),
@@ -117,12 +111,12 @@ fn targets(
             .container
             .as_ref()
             .map_or(8, |container| container.shared_memory_gi_b)
-            * crate::hardware::GIB,
+            * nemoclaw_runtime::hardware::GIB,
         host_ipc: service
             .container
             .as_ref()
             .is_some_and(|container| container.ipc == ServiceIpc::Host),
-        memory_bytes: 104 * crate::hardware::GIB,
+        memory_bytes: 104 * nemoclaw_runtime::hardware::GIB,
         gpu: true,
     };
     let spec = Spec {

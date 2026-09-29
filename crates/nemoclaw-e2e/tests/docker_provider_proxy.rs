@@ -3,7 +3,8 @@
 #![cfg(target_os = "linux")]
 
 use nemoclaw_e2e::openshell::Fixture;
-use nemoclaw_sdk::{CancellationToken, Deployment, config::Document, docker::Engine};
+use nemoclaw_provider::docker::Engine;
+use nemoclaw_sdk::{CancellationToken, Deployment, config::Document};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{fs, path::PathBuf, process::Command};

@@ -15,6 +15,12 @@
 //! ```compile_fail
 //! use nemoclaw_sdk::with_download_progress;
 //! ```
+//!
+//! Engine operations are implemented by the bundled provider:
+//!
+//! ```compile_fail
+//! use nemoclaw_sdk::docker::Engine;
+//! ```
 
 use std::fmt;
 
@@ -87,7 +93,7 @@ pub enum ObservationError {
     BindingMismatch,
     /// A fixed, non-secret diagnostic from an owning backend.
     Backend(&'static str),
-    Hardware(crate::hardware::HardwareDiagnostic),
+    Hardware(nemoclaw_runtime::hardware::HardwareDiagnostic),
     SandboxStartup {
         phase: &'static str,
         reason: &'static str,
@@ -166,21 +172,14 @@ pub use deployment::{
     StepOutcome,
 };
 
-pub mod snapshot;
-
-pub mod docker;
-
 pub mod managed;
 
-pub mod hardware;
 pub mod hardware_discovery;
 
 mod tofu_ui;
 
 mod download;
-pub use download::{
-    ByteProgress, DownloadPhase, DownloadProgress, with_provider_download_progress,
-};
+pub use download::{ByteProgress, DownloadPhase, DownloadProgress};
 
 mod docker_compute;
 

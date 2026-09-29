@@ -30,7 +30,7 @@ async fn proxy_compute_changes_preserve_bound_credential_storage() {
         Some((200, serde_json::to_vec(&response).unwrap()))
     })
     .await;
-    let backend = super::super::ProxyBackend::new(Engine::connect(&fixture.endpoint).unwrap());
+    let backend = super::ProxyBackend::new(Engine::connect(&fixture.endpoint).unwrap());
     // Durable auxiliary rows no longer depend on image, model, or port settings.
     let mut row: Row = [
         (
@@ -74,7 +74,7 @@ async fn obsolete_proxy_backend_rejects_compute_without_engine_effects() {
         )
     })
     .await;
-    let backend = super::super::ProxyBackend::new(Engine::connect(&fixture.endpoint).unwrap());
+    let backend = super::ProxyBackend::new(Engine::connect(&fixture.endpoint).unwrap());
     let expected = ObservationError::Backend("proxy lifecycle belongs to the Docker provider");
     assert_eq!(
         backend.ensure("ollama_proxy", &Row::new()).await.error(),

@@ -29,7 +29,7 @@ fn specs_for(document: &Document) -> Vec<String> {
     compile::runtime_targets(document, &generations)
         .unwrap()
         .into_iter()
-        .filter(|target| super::super::resource_behavior(&target.kind).runtime_process)
+        .filter(|target| nemoclaw_sdk::services::resource_behavior(&target.kind).runtime_process)
         .map(|target| target.values["spec"].clone())
         .collect()
 }
@@ -82,10 +82,11 @@ fn combined_accounting_preserves_running_allocations_and_counts_host_reserve_onc
 fn combined_accounting_includes_mixed_installers_and_dedicated_utilization() {
     let mut services = parse(None, &specs()).unwrap();
     let document = Document::parse(
-        include_bytes!("../../../tests/fixtures/config/managed-ollama.yaml").as_slice(),
+        include_bytes!("../../../../nemoclaw-sdk/tests/fixtures/config/managed-ollama.yaml")
+            .as_slice(),
     )
     .unwrap();
-    let super::super::ServiceDefinition::Ollama(service) =
+    let nemoclaw_sdk::services::ServiceDefinition::Ollama(service) =
         document.spec.services.into_values().next().unwrap()
     else {
         panic!("expected Ollama")
@@ -223,7 +224,7 @@ async fn capacity_observation_counts_combined_budgets_and_largest_reserve_once()
     let mut document =
         Document::parse(include_bytes!("../../../../../examples/spark/two-models.yaml").as_slice())
             .unwrap();
-    let super::super::ServiceDefinition::Vllm(service) =
+    let nemoclaw_sdk::services::ServiceDefinition::Vllm(service) =
         document.spec.services.get_mut("smart").unwrap()
     else {
         panic!("expected vLLM");

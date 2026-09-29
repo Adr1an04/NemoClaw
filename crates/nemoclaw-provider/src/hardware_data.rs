@@ -1,11 +1,10 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::hardware_observation::observe_hardware;
 use crate::provider::ConfiguredBackend;
 use async_trait::async_trait;
-use nemoclaw_sdk::{
-    discovery::ObservationStatus, docker::Engine, hardware_discovery::observe_hardware,
-};
+use nemoclaw_sdk::discovery::ObservationStatus;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tf_provider::{
@@ -26,7 +25,7 @@ pub(crate) struct HardwareState {
 fn valid(config: &HardwareState) -> bool {
     match &config.engine {
         Value::Unknown => true,
-        Value::Value(engine) => Engine::validate_endpoint(engine).is_ok(),
+        Value::Value(engine) => crate::config::validate_engine_endpoint(engine).is_ok(),
         Value::Null => false,
     }
 }

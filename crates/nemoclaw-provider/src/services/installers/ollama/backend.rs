@@ -15,7 +15,7 @@ impl ProxyBackend {
         Self { engine }
     }
     pub fn supports(kind: &str) -> bool {
-        super::proxy::supports(kind)
+        super::supports(kind)
     }
 }
 fn diagnostic(error: &Error) -> ObservationError {

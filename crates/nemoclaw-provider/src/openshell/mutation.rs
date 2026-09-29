@@ -75,12 +75,13 @@ impl OpenShell {
             if !value(want, "credential_env").is_empty() {
                 return Err(ObservationError::BindingMismatch);
             }
-            nemoclaw_sdk::services::authentication::Source::parse(
-                source,
-                value(want, "owner"),
-                value(want, "endpoint"),
-            )?
-            .resolve()
+            crate::services::authentication::resolve(
+                &nemoclaw_sdk::services::authentication::Source::parse(
+                    source,
+                    value(want, "owner"),
+                    value(want, "endpoint"),
+                )?,
+            )
             .await?
         } else {
             match value(want, "credential_env") {

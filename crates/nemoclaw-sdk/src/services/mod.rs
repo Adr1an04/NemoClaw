@@ -10,13 +10,11 @@
 pub mod authentication;
 pub(crate) mod capacity;
 mod contract;
-pub mod placement;
-pub use capacity::{ServiceCapacity, observe_service_capacity, validate_capacity_specs};
 pub mod installers;
+pub mod placement;
 mod readiness;
 mod registry;
 pub(crate) use readiness::configure_proxy_readiness;
-pub use readiness::{validate_readiness_spec, wait_service_ready};
 mod validation;
 pub use validation::validate_resource_spec;
 
@@ -27,8 +25,7 @@ pub use installers::ollama::{
 };
 pub(crate) use registry::InstallPlans;
 pub use registry::{
-    BackendRegistry, ResourceBehavior, ResourceSchema, ServiceDefinition, resource_behavior,
-    resource_schemas,
+    ResourceBehavior, ResourceSchema, ServiceDefinition, resource_behavior, resource_schemas,
 };
 pub(crate) use registry::{
     constrain_schema, credential_source_json, defaults, discovery_engines, generation_kinds,

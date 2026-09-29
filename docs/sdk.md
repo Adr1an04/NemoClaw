@@ -101,7 +101,6 @@ Only reference names, availability, and safe reasons are returned.
 Plan results include these direct observations in `OperationResult.discovery`, outside OpenTofu provider state.
 Provider subprocess discovery resolves credential references from its environment; it does not accept arbitrary in-process secret resolvers through `DiscoverySession`.
 For an explicit application-owned endpoint read, `observe_endpoint(&request, secrets)` accepts the application's resolver.
-For explicit host measurements, `hardware_discovery::observe_host_hardware(&engine, observer)` accepts a selected `HostObserver` and checks its daemon identity.
 These operations do not infer runtime feasibility from an available model name or advertised GPU.
 
 Deployment planning already refreshes selected resources and gateway metadata through their owners.
@@ -218,8 +217,8 @@ If destroy is unfinished, resume destroy; cancellation is not a rollback or a lo
 
 ## Docker Over SSH
 
-On Unix clients, `docker::Engine::connect("ssh://operator@gpu-box:2222")` selects Docker through the system OpenSSH client and the remote `docker system dial-stdio` command.
-Connection construction is lazy.
+Set a managed service's `placement.engine` to an explicit SSH URL, such as `ssh://operator@gpu-box:2222`.
+On Unix clients, the provider uses the system OpenSSH client and the remote `docker system dial-stdio` command.
 The remote user must be able to run Docker against the intended daemon.
 
 Host keys must already be trusted.
@@ -230,16 +229,11 @@ Each API request has its own SSH connection, with a 10-second connection timeout
 There is no connection pool or automatic mutation retry.
 Errors do not include SSH stderr.
 
-SSH engines default to an unavailable remote capacity observer.
-Supply a typed `HostObserver` with `with_host_observer` when remote measurements are available; local `/proc`, GPU and disk data are never substituted.
-Existing engine ID and resource ownership checks apply to observations obtained over SSH.
-
-Managed service placement now selects this transport independently of the OpenShell gateway.
-For an explicit SSH service, both SDK runtime validation and the provider subprocess use the fixed `SshHost` collector, unless an in-process SDK caller supplies its own observer.
-Plain `Engine::connect` retains the unavailable default.
-
-The collector reads the SSH host's Linux memory, NVIDIA inventory and Docker storage filesystem, rejects a Docker context pointing to another host, and tags measurements with the daemon identity for comparison.
-Python 3, Docker and `nvidia-smi` must already be available on that host.
+Service placement selects this transport independently of the OpenShell gateway.
+Explicit capacity observation uses the provider's host collector to read the SSH host's Linux memory, NVIDIA inventory and Docker storage filesystem.
+The collector rejects a Docker context pointing to another host and checks the daemon identity before accepting measurements.
+Collector failure never substitutes the client's hardware.
+For that observation, Python 3, Docker and `nvidia-smi` must already be available on that host.
 No packages are installed.
 
 This transport does not tunnel inference traffic.

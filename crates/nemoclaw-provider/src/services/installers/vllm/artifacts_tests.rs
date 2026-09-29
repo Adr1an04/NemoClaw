@@ -70,7 +70,7 @@ async fn runtime_status_requires_complete_current_data_and_never_mutates() {
 }
 
 use super::super::capacity::verify_stat;
-use crate::snapshot::VerifiedFile;
+use nemoclaw_runtime::snapshot::VerifiedFile;
 #[test]
 fn artifact_manifests_require_matching_identity_and_unchanged_regular_files() {
     let service = crate::services::installers::vllm::configured_service(&observed().spec).unwrap();
@@ -79,7 +79,7 @@ fn artifact_manifests_require_matching_identity_and_unchanged_regular_files() {
     let modified = timestamp("2026-09-14T00:00:00.123456789Z")
         .unwrap()
         .unix_timestamp_nanos() as u64;
-    let mut local = crate::snapshot::ModelManifest::new(&manifest);
+    let mut local = nemoclaw_runtime::snapshot::ModelManifest::new(&manifest);
     assert!(local.verified_files().is_err());
     for file in &mut local.files {
         file.modified = Some(modified);
@@ -101,7 +101,10 @@ fn artifact_manifests_require_matching_identity_and_unchanged_regular_files() {
     );
     local = original.clone();
     local.version = 2;
-    assert!(crate::snapshot::ModelManifest::decode(&serde_json::to_vec(&local).unwrap()).is_err());
+    assert!(
+        nemoclaw_runtime::snapshot::ModelManifest::decode(&serde_json::to_vec(&local).unwrap())
+            .is_err()
+    );
     local = original.clone();
     local.files.swap(0, 1);
     assert!(local.validate_for(&manifest).is_err());
@@ -137,7 +140,7 @@ fn artifact_manifests_require_matching_identity_and_unchanged_regular_files() {
         files: ["prepared.bin".to_owned(), "prepared.json".to_owned()]
             .into_iter()
             .map(|name| VerifiedFile {
-                file: crate::snapshot::File {
+                file: nemoclaw_runtime::snapshot::File {
                     name,
                     size: 100,
                     sha256: "a".repeat(64),

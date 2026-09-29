@@ -7,20 +7,9 @@ pub use config::{
     ExternalOllama, ExternalOllamaModel, ManagedOllama, OllamaMemory, OllamaModel, OllamaProxy,
     OllamaServing,
 };
-mod models;
-pub use models::*;
-pub(in crate::services) mod artifacts;
-#[doc(hidden)]
-pub use nemoclaw_runtime::ollama::hardware_capacity;
-#[doc(hidden)]
-pub use nemoclaw_runtime::ollama::model_source;
-#[doc(hidden)]
-pub use nemoclaw_runtime::ollama::policy;
 mod proxy_container;
 pub use proxy_container::{ProxySettings, ProxySpec};
-mod backend;
-pub(crate) mod proxy;
-pub use backend::ProxyBackend;
+pub mod proxy;
 
 use crate::managed::{Process, Spec, Storage};
 use crate::{
@@ -32,7 +21,7 @@ use crate::{
 use std::collections::BTreeMap;
 use url::Url;
 
-pub(crate) const MODEL_PATTERN: &str = r"^[a-z0-9][a-z0-9._-]*:[a-z0-9][a-z0-9._-]*$";
+pub const MODEL_PATTERN: &str = r"^[a-z0-9][a-z0-9._-]*:[a-z0-9][a-z0-9._-]*$";
 
 pub(crate) fn constrain_schema(
     defs: &mut serde_json::Map<String, serde_json::Value>,
@@ -141,12 +130,10 @@ fn address(kind: &str, name: &str) -> String {
     format!("nemoclaw_{kind}.{name}")
 }
 
-pub(crate) const SERVICE_KIND: &str = "ollama_service";
-pub(crate) const STORAGE_KIND: &str = "ollama_service_storage";
+pub const SERVICE_KIND: &str = "ollama_service";
+pub const STORAGE_KIND: &str = "ollama_service_storage";
 
-pub(crate) fn configured_service(
-    spec: &Spec,
-) -> Result<nemoclaw_runtime::ollama::ManagedOllama, Error> {
+pub fn configured_service(spec: &Spec) -> Result<nemoclaw_runtime::ollama::ManagedOllama, Error> {
     match nemoclaw_runtime::RuntimeSpec::decode(spec.runtime_configuration()?)? {
         nemoclaw_runtime::RuntimeSpec::Ollama(service) => Ok(*service),
         _ => Err(Error::Conflict("runtime configuration is not Ollama")),
@@ -196,12 +183,12 @@ fn managed_targets(
             .container
             .as_ref()
             .map_or(8, |container| container.shared_memory_gi_b)
-            * crate::hardware::GIB,
+            * nemoclaw_runtime::hardware::GIB,
         host_ipc: service
             .container
             .as_ref()
             .is_some_and(|container| container.ipc == super::vllm::ServiceIpc::Host),
-        memory_bytes: 104 * crate::hardware::GIB,
+        memory_bytes: 104 * nemoclaw_runtime::hardware::GIB,
         gpu: true,
     };
     let spec = Spec {

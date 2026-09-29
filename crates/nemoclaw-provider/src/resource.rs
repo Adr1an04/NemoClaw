@@ -401,7 +401,7 @@ impl Resource for ResourceAdapter {
                 return None;
             }
         };
-        let mutation = nemoclaw_sdk::with_provider_download_progress(
+        let mutation = crate::download::with_provider_download_progress(
             download_resource(self.definition.kind, &row),
             self.backend.ensure(self.definition.kind, &row),
         )
@@ -429,7 +429,7 @@ impl Resource for ResourceAdapter {
                 return Some((prior, private));
             }
         };
-        let mutation = nemoclaw_sdk::with_provider_download_progress(
+        let mutation = crate::download::with_provider_download_progress(
             download_resource(self.definition.kind, &row),
             self.backend.ensure(self.definition.kind, &row),
         )

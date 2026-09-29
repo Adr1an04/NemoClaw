@@ -14,6 +14,8 @@ serde_json.workspace = true
 toml = { version = "1.1", default-features = false, features = ["parse", "serde"] }
 
 [dev-dependencies]
+bollard.workspace = true
+nemoclaw-provider = { path = "../nemoclaw-provider" }
 toml = { version = "1.1", default-features = false, features = ["parse", "serde"] }
 tokio = { workspace = true, features = ["test-util"] }
 
@@ -28,7 +30,7 @@ serde.workspace = true
 serde_json.workspace = true
 serde-saphyr.workspace = true
 sha2.workspace = true
-sha1.workspace = true
+time.workspace = true
 regex.workspace = true
 url.workspace = true
 ipnet.workspace = true
@@ -41,17 +43,11 @@ process-wrap.workspace = true
 tokio-util.workspace = true
 reqwest.workspace = true
 futures-util.workspace = true
-bollard.workspace = true
-tar.workspace = true
+bollard-stubs = "=1.53.1-rc.29.3.1"
 interprocess = { version = "2.4.4", features = ["tokio"] }
-time.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rustix = { workspace = true, features = ["process"] }
-
-[target.'cfg(unix)'.dependencies]
-hyper = { version = "1", features = ["client", "http1"] }
-hyper-util = { version = "0.1", features = ["tokio"] }
 
 [target.'cfg(windows)'.dependencies]
 widestring = "1"

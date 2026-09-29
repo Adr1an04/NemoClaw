@@ -87,7 +87,7 @@ An observation describes the selected target at the time of its read; it is not 
 |---|---|---|
 | Engine prerequisites | `nemoclaw_engine_capabilities`; selected Docker/Podman API | Onboarding target changes and managed deployment planning |
 | Engine features, CPU, memory, and advertised GPU inventory | `nemoclaw_target_hardware`; selected engine API | Onboarding and planning for selected gateway/service engines |
-| GPU memory, driver, compute capability, and disk measurements | Direct SDK `observe_host_hardware` with a selected `HostObserver` | Explicit direct calls or existing configured service-capacity checks; the new passive hardware source does not run collectors |
+| GPU memory, driver, compute capability, and disk measurements | Provider `observe_host_hardware` with a selected `HostObserver` | Explicit direct calls or existing configured service-capacity checks; the new passive hardware source does not run collectors |
 | Packaged adapters, APIs, settings, and runtime requirements | `nemoclaw_fabric_capabilities`; selected image metadata containing Fabric discovery results | Onboarding image changes and managed deployment planning |
 | Advertised models and catalog authentication | `nemoclaw_inference_capabilities`; HTTP model-list endpoint from the control host | Onboarding endpoint changes and planning for selected inference routes |
 | Credential-reference availability | Direct SDK `observe_credentials`; application's secret resolver | Onboarding, SDK calls, and plan-result discovery; values and local availability do not enter provider state |
@@ -143,7 +143,7 @@ The passive read reports the daemon identity, architecture, CPU/memory fields, a
 GPU IDs advertised as engine generic resources are retained without inventing names, VRAM, driver versions, or compute capability.
 No GPU advertisement means unknown inventory, not zero GPUs.
 
-For complete host measurements, explicitly call the SDK's `hardware_discovery::observe_host_hardware` with the selected engine and a `HostObserver`.
+For complete host measurements, the provider library exposes `hardware_observation::observe_host_hardware` with the selected engine and a `HostObserver`.
 The operation checks the collector's daemon identity before accepting measurements and has a 30-second bound.
 It reports unsupported GPU memory counters separately from unobserved counters.
 Collector failure never falls back to the client's hardware.

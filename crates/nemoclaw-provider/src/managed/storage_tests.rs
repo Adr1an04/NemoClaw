@@ -41,23 +41,23 @@ async fn model_storage_recovers_lost_creation_and_never_recreates_bound_data() {
         generation: "b".repeat(32),
         engine: fixture.endpoint.clone(),
     };
-    assert_eq!(storage.observe(&engine, "").await.unwrap(), None);
-    assert!(storage.ensure(&engine, "").await.is_err());
-    let id = storage.ensure(&engine, "").await.unwrap();
+    assert_eq!(observe_storage(&storage, &engine, "").await.unwrap(), None);
+    assert!(ensure_storage(&storage, &engine, "").await.is_err());
+    let id = ensure_storage(&storage, &engine, "").await.unwrap();
     assert_eq!(
         id,
         "engine/nc-0123456789abcdef-inference-data/2026-09-14T00:00:00Z"
     );
-    assert_eq!(storage.ensure(&engine, &id).await.unwrap(), id);
+    assert_eq!(ensure_storage(&storage, &engine, &id).await.unwrap(), id);
     state.lock().unwrap().fail_read = true;
-    assert!(storage.observe(&engine, &id).await.is_err());
-    assert!(storage.ensure(&engine, &id).await.is_err());
+    assert!(observe_storage(&storage, &engine, &id).await.is_err());
+    assert!(ensure_storage(&storage, &engine, &id).await.is_err());
     state.lock().unwrap().fail_read = false;
     state.lock().unwrap().volume.as_mut().unwrap()["Labels"][OWNER_LABEL] = json!("foreign");
-    assert!(storage.ensure(&engine, &id).await.is_err());
+    assert!(ensure_storage(&storage, &engine, &id).await.is_err());
     state.lock().unwrap().volume = None;
-    assert!(storage.observe(&engine, &id).await.is_err());
-    assert!(storage.ensure(&engine, &id).await.is_err());
+    assert!(observe_storage(&storage, &engine, &id).await.is_err());
+    assert!(ensure_storage(&storage, &engine, &id).await.is_err());
     assert_eq!(state.lock().unwrap().creates, 1);
 }
 
@@ -69,7 +69,7 @@ async fn changed_connection_cannot_adopt_an_identical_volume_on_a_different_daem
         generation: "b".repeat(32),
         engine: "unix:///unused".into(),
     };
-    let volume = json!({"Name":storage.name,"Driver":"local","Scope":"local","Mountpoint":"/var/lib/docker/volumes/shared/_data","CreatedAt":"same-time","Labels":storage.labels(),"Options":{}});
+    let volume = json!({"Name":storage.name,"Driver":"local","Scope":"local","Mountpoint":"/var/lib/docker/volumes/shared/_data","CreatedAt":"same-time","Labels":labels(&storage),"Options":{}});
     let start = |id: &'static str, volume: Value| async move {
         let identity = Arc::new(Mutex::new((id, 200)));
         let current = identity.clone();
@@ -93,23 +93,19 @@ async fn changed_connection_cannot_adopt_an_identical_volume_on_a_different_daem
     let (alias_a, _) = start("daemon-a", volume.clone()).await;
     let (b, _) = start("daemon-b", volume).await;
     storage.engine = a.endpoint.clone();
-    let id = storage
-        .observe(&Engine::connect(&a.endpoint).unwrap(), "")
+    let id = observe_storage(&storage, &Engine::connect(&a.endpoint).unwrap(), "")
         .await
         .unwrap()
         .unwrap();
     // Credential rejection changes connection availability, not the binding.
     *access.lock().unwrap() = ("daemon-a", 401);
     assert!(matches!(
-        storage
-            .ensure(&Engine::connect(&a.endpoint).unwrap(), &id)
-            .await,
+        ensure_storage(&storage, &Engine::connect(&a.endpoint).unwrap(), &id).await,
         Err(Error::Observation(ObservationError::Authentication))
     ));
     *access.lock().unwrap() = ("daemon-a", 200);
     assert_eq!(
-        storage
-            .ensure(&Engine::connect(&a.endpoint).unwrap(), &id)
+        ensure_storage(&storage, &Engine::connect(&a.endpoint).unwrap(), &id)
             .await
             .unwrap(),
         id
@@ -117,25 +113,21 @@ async fn changed_connection_cannot_adopt_an_identical_volume_on_a_different_daem
     // Retargeting the same alias/socket also cannot adopt matching names.
     *access.lock().unwrap() = ("different-daemon", 200);
     assert!(matches!(
-        storage
-            .ensure(&Engine::connect(&a.endpoint).unwrap(), &id)
-            .await,
+        ensure_storage(&storage, &Engine::connect(&a.endpoint).unwrap(), &id).await,
         Err(Error::Observation(ObservationError::BindingMismatch))
     ));
     *access.lock().unwrap() = ("daemon-a", 200);
     // A different socket reaching the same daemon retains resource identity.
     storage.engine = alias_a.endpoint.clone();
     assert_eq!(
-        storage
-            .observe(&Engine::connect(&alias_a.endpoint).unwrap(), &id)
+        observe_storage(&storage, &Engine::connect(&alias_a.endpoint).unwrap(), &id)
             .await
             .unwrap(),
         Some(id.clone())
     );
     // Even identical names, labels and timestamps do not permit a target change.
     storage.engine = b.endpoint.clone();
-    let error = storage
-        .ensure(&Engine::connect(&b.endpoint).unwrap(), &id)
+    let error = ensure_storage(&storage, &Engine::connect(&b.endpoint).unwrap(), &id)
         .await
         .unwrap_err();
     assert!(matches!(
