@@ -117,7 +117,7 @@ impl Spec {
                 .kind
                 .bytes()
                 .all(|byte| byte.is_ascii_lowercase() || byte == b'_')
-                && crate::docker::Engine::validate_endpoint(&process.engine).is_ok()
+                && crate::config::validate_engine_endpoint(&process.engine).is_ok()
                 && (process.engine.starts_with("unix://") || process.engine.starts_with("ssh://"))
                 && process.image.contains("@sha256:")
                 && valid_token(&process.configuration)

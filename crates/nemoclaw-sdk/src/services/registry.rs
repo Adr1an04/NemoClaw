@@ -154,7 +154,7 @@ impl ServiceDefinition {
         let gateway = &document.spec.gateway;
         let local_docker = gateway.as_managed().is_some_and(|gateway| {
             gateway.engine.starts_with("unix:///")
-                && crate::docker::Engine::validate_endpoint(&gateway.engine).is_ok()
+                && crate::config::validate_engine_endpoint(&gateway.engine).is_ok()
         }) && document
             .spec
             .sandboxes

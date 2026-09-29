@@ -108,7 +108,7 @@ impl OllamaProxy {
         require(
             self.engine.as_ref().is_none_or(|engine| {
                 engine.starts_with("unix:///")
-                    && crate::docker::Engine::validate_endpoint(engine).is_ok()
+                    && crate::config::validate_engine_endpoint(engine).is_ok()
             }),
             "proxy engine must be a local Unix socket",
         )?;

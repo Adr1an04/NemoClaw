@@ -5,7 +5,9 @@ mod agent_inference;
 pub(crate) mod constraints;
 #[doc(hidden)]
 pub mod credential_metadata;
+mod engine_endpoint;
 mod execution;
+pub use engine_endpoint::validate_engine_endpoint;
 pub(crate) mod integration_policy;
 mod integrations;
 pub use integration_policy::search_policy;

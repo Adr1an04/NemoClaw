@@ -69,7 +69,7 @@ fn parse(encoded: &str) -> Result<ReadinessSpec, Error> {
             engine,
             proxy: spec,
         } = &proxy;
-        crate::docker::Engine::validate_endpoint(engine)?;
+        crate::config::validate_engine_endpoint(engine)?;
         spec.validate()?;
         return Ok(ReadinessSpec::Proxy(proxy));
     }

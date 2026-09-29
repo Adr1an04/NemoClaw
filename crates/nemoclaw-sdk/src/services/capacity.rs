@@ -45,7 +45,7 @@ fn parse(engine: Option<&str>, specs: &[String]) -> Result<Vec<(CapacityService,
         ));
     }
     if let Some(engine) = engine {
-        crate::docker::Engine::validate_endpoint(engine)?;
+        crate::config::validate_engine_endpoint(engine)?;
     }
     let mut names = BTreeSet::new();
     specs
