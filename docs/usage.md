@@ -76,7 +76,7 @@ Destroy retains that network and gateway storage.
 
 ## Fabric Health During Apply
 
-Apply requests health from each existing Fabric runtime after configuration and infrastructure readiness checks, including on unchanged applies.
+Apply requests the packaged bridge's health report after configuration and infrastructure readiness checks, including on unchanged applies.
 It does not invoke agents, send generation requests, repair failures, or replay work.
 Plan, export, and destroy do not request Fabric health.
 
@@ -87,7 +87,8 @@ An unsupported dependency is not a successful check.
 These observations do not test every inference route or integration.
 
 **Current limit:** the pinned Fabric lacks `runtime.check_health()`.
-New images report `supported: false`, `report: null`, and `reason_code: fabric_health_unsupported` while apply retains its other configuration and readiness checks.
+New images report `supported: false`, `report: null`, and `reason_code: fabric_health_unsupported` locally, without contacting the running Fabric host.
+Apply retains its other configuration and readiness checks.
 Success therefore does not establish fresh Fabric health or working inference.
 Real adapter health qualification remains **TBD** until an accepted implementation is pinned and tested.
 

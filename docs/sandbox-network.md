@@ -99,7 +99,10 @@ flowchart LR
 Use the plan/apply/export commands in [deployment usage](usage.md), then reapply the exported document.
 A successful unchanged reapply preserves the sandbox identity and creates no replacement.
 Export compares the observed policy and launch settings with retained intent and checks that a ready sandbox has loaded the matching policy revision.
-Missing policy observations or drift stop export; they do not produce a partial configuration.
+OpenShell can persist supervisor-added filesystem grants in the active policy revision without recording their source.
+NemoClaw accepts only the bounded baseline additions checked by this version; other differences or incomplete observations stop export and preserve state.
+GPU-specific additions are not qualified by this check.
+Missing policy observations or drift do not produce a partial configuration.
 
 Policy changes require sandbox replacement, which ordinary apply rejects.
 Back up sandbox files and conversation history before using the explicit [destroy and recreate procedure](usage.md#destroy).

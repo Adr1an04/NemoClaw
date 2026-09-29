@@ -90,6 +90,11 @@ The selected-image descriptor snapshot is validated by Fabric's planner, without
 An unavailable or incompatible metadata version leaves native validation unknown.
 Generic field validation helps the interview; Fabric's planner owns validation of the complete native configuration.
 
+The Fabric revision remains pinned until the [descriptor catalog change](https://github.com/NVIDIA/NeMo-Fabric/pull/318) and its adapter follow-ups are available together.
+That change removes `config.schema` without a replacement; NemoClaw must stop using it to infer required workflows when adopting that revision.
+Settings, model, and target schemas remain owner contracts.
+A pin update must preserve the currently qualified native configuration, model roles, web integrations, and retained adapter state before regenerating discovery metadata.
+
 The authoring dependency graph relates fields independently of their screen order.
 The next-question heuristic considers unresolved fields whose active prerequisites are resolved, then prefers the field that constrains the most remaining decisions.
 Ties retain presentation order; inactive fields and choices with only one valid answer do not require a question.
