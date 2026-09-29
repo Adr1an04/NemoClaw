@@ -182,9 +182,9 @@ From the repository root, select the command matching the build host:
 
 ```sh
 # Linux ARM64:
-cargo run -p nemoclaw-build -- runtime runtimes/ollama/build.json
+cargo run -p nemoclaw-build --no-default-features -- runtime runtimes/ollama/build.json
 # Linux AMD64:
-cargo run -p nemoclaw-build -- runtime runtimes/ollama-amd64/build.json
+cargo run -p nemoclaw-build --no-default-features -- runtime runtimes/ollama-amd64/build.json
 ```
 
 Each command builds and loads a local image and retains its OCI archive under `.build/ollama` or `.build/ollama-amd64`.
