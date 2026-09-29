@@ -46,8 +46,5 @@ futures-util.workspace = true
 bollard-stubs = "=1.53.1-rc.29.3.1"
 interprocess = { version = "2.4.4", features = ["tokio"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-rustix = { workspace = true, features = ["process"] }
-
 [target.'cfg(windows)'.dependencies]
 widestring = "1"

@@ -21,7 +21,6 @@ interprocess = { version = "2.4.4", features = ["tokio"] }
 time.workspace = true
 tokio-util.workspace = true
 getrandom.workspace = true
-process-wrap.workspace = true
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -42,7 +41,6 @@ hyper = { version = "1", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 
 [dev-dependencies]
-serde-saphyr.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 tempfile.workspace = true
 
