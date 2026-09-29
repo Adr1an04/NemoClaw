@@ -255,6 +255,9 @@ From the directory containing your deployment YAML, with the matching bundle and
 nemoclaw export --state-dir .local/deployment --output exported-new.yaml
 ```
 
+For Brave and Tavily integrations, export preserves definitions, selection references, and credential references at their authored deployment, sandbox, or agent scope.
+It observes installed search registrations without resolving search keys and rejects registration drift; reapply still requires the referenced credentials.
+
 After export succeeds, inspect its configuration and reapply it using the same state:
 
 ```sh
