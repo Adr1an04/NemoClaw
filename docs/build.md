@@ -68,7 +68,7 @@ Rebuild a bundle from the recorded source revision if the removed tools are need
 Use Docker with Buildx on a native host that matches the selected image target.
 Pass `--platform linux/arm64` or `--platform linux/amd64` to the agent image builder.
 Direct Bake checks and proxy builds require the corresponding `AGENT_PLATFORM` environment variable.
-ARM64 selects all ten harnesses; AMD64 selects the native locks and stages for Deep Agents and OpenClaw.
+ARM64 selects all ten harnesses; AMD64 selects Deep Agents and OpenClaw.
 The remaining harnesses are ARM64-only until their pinned native dependencies have matching AMD64 artifacts and qualification.
 Agent images use Node.js 24.21.0 LTS and Python 3.14.7.
 The `nooa`, `nooa-bench`, and `hermes` targets use Python 3.13.15 because their pinned upstream releases require Python below 3.14.
@@ -109,8 +109,10 @@ On ARM64, select `hermes`, `pi`, or another name from the [harness matrix](refer
 The proxy and its `proxy-tests` target use the same explicit platform selector.
 Set `IMAGE_PREFIX=nc-my-build` before the builder to use your own local repository name without replacing another build's tags.
 
-[The Bake file](../docker-bake.hcl) selects the target platform, qualified harnesses, dependency locks, and named stages in the [shared agent Dockerfile](../image/fabric/Dockerfile).
-Common Fabric wheels and base layers are shared; selected images contain only their required harness dependencies.
+[The Bake file](../docker-bake.hcl) selects the target platform, qualified harnesses and named stages in the [shared agent Dockerfile](../image/fabric/Dockerfile).
+Common Fabric wheels and base layers are shared; images other than Hermes export dependencies from Fabric's frozen root lock, selecting the Python adapter's extra when present.
+Hermes retains a separate native dependency supplement, described in the [source notice](../image/NOTICE.md).
+The exact Python base-image pins remain image-build inputs; uv validates installed adapter `Requires-Python` constraints.
 The builder verifies archive and wheel hashes, retains upstream archives and local build sources under `/opt/nemoclaw/source/`, and records local source hashes in `/opt/nemoclaw/provenance.json`.
 The [source notice](../image/NOTICE.md) describes retained sources and licenses.
 Pinned archives and wheels do not make the whole image bit-reproducible: Debian packages still come from the configured repositories.
