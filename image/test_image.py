@@ -45,6 +45,23 @@ class AgentImage(unittest.TestCase):
             versions = {item["version"] for item in packages if item["name"] == package["name"]}
             self.assertIn(installed, versions, package["name"])
 
+    @unittest.skipUnless(os.environ.get("NEMOCLAW_TEST_HARNESS") == "pi", "Pi image only")
+    def test_pi_installs_packed_adapters_without_source_tests(self):
+        root = Path("/opt/fabric-source")
+        for package in (
+            "adapter-contract/typescript",
+            "adapters/typescript/common",
+            "adapters/typescript/pi",
+        ):
+            directory = root / package
+            manifest = json.loads((directory / "package.json").read_text())
+            self.assertEqual(
+                {path.name for path in directory.iterdir()},
+                set(manifest["files"]) | {"package.json"},
+                package,
+            )
+        self.assertFalse((root / "adapters/typescript/opencode").exists())
+
     @unittest.skipUnless(os.environ.get("NEMOCLAW_TEST_HARNESS") == "hermes", "Hermes image only")
     def test_hermes_accepts_fabric_request_metadata(self):
         from gateway.platforms.api_server import _request_relay_metadata

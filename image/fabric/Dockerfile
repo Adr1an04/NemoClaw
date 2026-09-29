@@ -119,11 +119,24 @@ RUN mkdir -p /opt/fabric-source/adapter-contract /opt/fabric-source/adapters \
     && cp -a /src/fabric/adapter-contract/typescript /opt/fabric-source/adapter-contract/ \
     && cp -a /src/fabric/adapters/typescript /opt/fabric-source/adapters/
 RUN --mount=type=cache,target=/root/.npm \
-    cd /opt/fabric-source/adapter-contract/typescript && npm ci --no-audit --no-fund && npm run build \
-    && cd /opt/fabric-source/adapters/typescript && npm ci --no-audit --no-fund && npm run build
+    cd /opt/fabric-source/adapter-contract/typescript && npm ci --ignore-scripts --no-audit --no-fund && npm run build \
+    && cd /opt/fabric-source/adapters/typescript \
+    && npm ci --workspace nemo-fabric-adapters-pi --include-workspace-root --ignore-scripts --no-audit --no-fund \
+    && npm run build --workspace nemo-fabric-adapters-common && npm run build --workspace nemo-fabric-adapters-pi
+
+# Preserve npm ci's locked peer dependencies while installing only packed code.
+RUN mkdir -p /opt/pi/adapters/typescript \
+    && cp -a /opt/fabric-source/adapters/typescript/node_modules /opt/pi/adapters/typescript/ \
+    && rm -f /opt/pi/adapters/typescript/node_modules/nemo-fabric-adapters-opencode \
+    && for package in adapter-contract/typescript adapters/typescript/common adapters/typescript/pi; do \
+        mkdir -p "/opt/pi/$package" \
+        && (cd "/opt/fabric-source/$package" && npm pack --ignore-scripts --pack-destination "/opt/pi/$package") \
+        && tar -xzf /opt/pi/$package/*.tgz -C "/opt/pi/$package" --strip-components=1 \
+        && rm /opt/pi/$package/*.tgz || exit 1; \
+    done
 
 FROM runtime-base AS pi
-COPY --from=pi-build /opt/fabric-source /opt/fabric-source
+COPY --from=pi-build /opt/pi /opt/fabric-source
 # Fabric discovery skips symlinked directories, so link only the descriptor.
 # Its runner script resolves beside the real file under /opt/fabric-source.
 RUN mkdir -p /opt/fabric/share/nemo-fabric/adapters/pi \
