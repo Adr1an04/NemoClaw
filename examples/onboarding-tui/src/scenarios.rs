@@ -35,7 +35,7 @@ fn default_onboarding_authors_openclaw_with_hosted_nvidia() {
         desired["spec"]["inferenceProviders"][0]["endpoint"],
         "https://integrate.api.nvidia.com/v1"
     );
-    assert_eq!(reparsed.credential_names(), ["NVIDIA_INFERENCE_API_KEY"]);
+    assert_eq!(reparsed.credential_names(), ["NVIDIA_API_KEY"]);
 }
 
 #[test]
@@ -78,7 +78,7 @@ fn onboarding_authors_hermes_with_hosted_nvidia() {
         desired["spec"]["inferenceProviders"][0]["api"],
         "openai-completions"
     );
-    assert_eq!(document.credential_names(), ["NVIDIA_INFERENCE_API_KEY"]);
+    assert_eq!(document.credential_names(), ["NVIDIA_API_KEY"]);
 }
 
 #[test]

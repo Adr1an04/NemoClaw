@@ -464,23 +464,18 @@ fn missing_credential_is_a_review_action_without_blocking_yaml_authoring() {
     let mut wizard = Wizard::new(capabilities, draft);
     wizard.target_status = Some("Target unverified. You can save and check it with plan.".into());
     wizard.facts.credentials = vec![CredentialObservation {
-        reference: "NVIDIA_INFERENCE_API_KEY".into(),
+        reference: "NVIDIA_API_KEY".into(),
         status: ObservationStatus::Unavailable,
         reason: None,
     }];
     let mut terminal = Terminal::new(TestBackend::new(72, 24)).unwrap();
     terminal.draw(|frame| wizard.render(frame)).unwrap();
-    assert!(
-        !terminal
-            .backend()
-            .to_string()
-            .contains("NVIDIA_INFERENCE_API_KEY")
-    );
+    assert!(!terminal.backend().to_string().contains("NVIDIA_API_KEY"));
     navigate(&mut wizard, Step::Review, Input::Continue);
     terminal.draw(|frame| wizard.render(frame)).unwrap();
     let rendered = terminal.backend().to_string();
     assert!(
-        rendered.contains("Set NVIDIA_INFERENCE_API_KEY before applying."),
+        rendered.contains("Set NVIDIA_API_KEY before applying."),
         "{rendered}"
     );
     for diagnostic in [
