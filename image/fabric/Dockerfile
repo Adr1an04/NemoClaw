@@ -47,13 +47,14 @@ RUN --mount=type=cache,target=/root/.cache/uv --mount=type=cache,target=/usr/loc
 FROM common-wheels AS harness-wheels
 ARG HARNESS
 ARG ADAPTER
-ARG LOCKFILE
 COPY image/fabric/ /build/
 COPY image/NOTICE.md docker-bake.hcl .dockerignore /build/
 RUN --mount=type=cache,target=/root/.cache/uv \
     if [ -n "$ADAPTER" ]; then uv build --python /usr/local/bin/python3 --wheel --out-dir /wheels "/src/fabric/adapters/python/$ADAPTER"; fi \
     && python3 /build/wheel_lock.py /wheels > /own-requirements.txt \
-    && cat "/build/$LOCKFILE" /own-requirements.txt > /requirements.txt \
+    && if [ "$HARNESS" = hermes ]; then cp /build/hermes-dependencies.lock /requirements.txt; \
+       else uv export --project /src/fabric --frozen --no-default-groups --no-emit-local ${ADAPTER:+--extra=$ADAPTER} --output-file /requirements.txt; fi \
+    && cat /own-requirements.txt >> /requirements.txt \
     && uv pip install --python /opt/fabric/bin/python --require-hashes --find-links /wheels -r /requirements.txt \
     && python3 /build/provenance.py > /provenance.json
 
@@ -120,6 +121,7 @@ RUN mkdir -p /opt/fabric-source/adapter-contract /opt/fabric-source/adapters \
 RUN --mount=type=cache,target=/root/.npm \
     cd /opt/fabric-source/adapter-contract/typescript && npm ci --no-audit --no-fund && npm run build \
     && cd /opt/fabric-source/adapters/typescript && npm ci --no-audit --no-fund && npm run build
+
 RUN --network=none node --test /opt/fabric-source/adapters/typescript/pi/test/pi-sdk.test.mjs \
         /opt/fabric-source/adapters/typescript/pi/test/runtime.test.mjs
 
