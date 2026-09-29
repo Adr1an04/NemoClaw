@@ -185,20 +185,6 @@ impl Deployment {
             let mut expected = target.values;
             expected.insert("id".into(), observed["id"].clone());
             match target.kind.as_str() {
-                "provider"
-                    if expected
-                        .get("provider_type")
-                        .is_some_and(|kind| kind == "brave") =>
-                {
-                    if expected
-                        .iter()
-                        .any(|(key, value)| observed.get(key) != Some(value))
-                    {
-                        return Err(Error::Conflict(
-                            "web search provider drift requires inspection",
-                        ));
-                    }
-                }
                 "provider" => export_provider(&mut document, &expected, &observed)?,
                 "sandbox" => export_sandbox(&expected, &observed)?,
                 _ => {}
@@ -258,6 +244,23 @@ fn validate_projection(target: &Target, observed: &Value) -> Result<(), Error> {
 }
 
 fn export_provider(document: &mut Document, expected: &Row, observed: &Row) -> Result<(), Error> {
+    // Search targets come from selected integrations, not inference definitions.
+    // Keep their authored scopes and credential references unchanged on export.
+    if expected
+        .get("provider_type")
+        .and_then(|kind| crate::config::SearchProvider::from_name(kind))
+        .is_some()
+    {
+        if expected
+            .iter()
+            .any(|(key, value)| observed.get(key) != Some(value))
+        {
+            return Err(Error::Conflict(
+                "web search provider drift requires inspection",
+            ));
+        }
+        return Ok(());
+    }
     if observed["provider_type"] != expected["provider_type"]
         || observed["endpoint"] != expected["endpoint"]
         || observed["credential_env"].is_empty() != expected["credential_env"].is_empty()
@@ -443,6 +446,68 @@ mod tests {
             .find(|target| target.kind == "provider")
             .unwrap()
             .values
+    }
+
+    #[test]
+    fn export_preserves_search_definitions_and_rejects_registration_drift() {
+        for provider in ["tavily", "brave"] {
+            for scope in ["deployment", "sandbox", "agent"] {
+                let mut document = Document::parse(
+                    include_str!("../../tests/fixtures/config/local.yaml").as_bytes(),
+                )
+                .unwrap();
+                let definitions = serde_json::from_value(json!({
+                    "search":{"kind":"webSearch", "provider":provider,
+                        "credential":{"env":"SEARCH_KEY"}}
+                }))
+                .unwrap();
+                let sandbox = &mut document.spec.sandboxes[0];
+                sandbox.agent.integration_refs = vec!["search".into()];
+                match scope {
+                    "deployment" => document.spec.integrations = definitions,
+                    "sandbox" => sandbox.integrations = definitions,
+                    _ => {
+                        sandbox.agent.integration_refs.clear();
+                        sandbox.agent.integrations = definitions;
+                    }
+                }
+                let record = Record::new(document.clone()).unwrap();
+                let expected = compile::targets(&document, &record.generations)
+                    .unwrap()
+                    .into_iter()
+                    .find(|target| {
+                        target.kind == "provider" && target.values["provider_type"] == provider
+                    })
+                    .unwrap()
+                    .values;
+                let mut exported = document.clone();
+                export_provider(&mut exported, &expected, &expected).unwrap();
+                assert_eq!(exported, document, "{provider}/{scope}");
+                for field in [
+                    "provider_type",
+                    "endpoint",
+                    "credential_env",
+                    "name",
+                    "workspace",
+                    "owner",
+                    "generation",
+                ] {
+                    for replacement in [Some("foreign"), None] {
+                        let mut observed = expected.clone();
+                        if let Some(value) = replacement {
+                            observed.insert(field.into(), value.into());
+                        } else {
+                            observed.remove(field);
+                        }
+                        assert!(
+                            export_provider(&mut exported, &expected, &observed).is_err(),
+                            "{provider}/{scope}/{field}/{replacement:?}"
+                        );
+                        assert_eq!(exported, document);
+                    }
+                }
+            }
+        }
     }
 
     #[test]

@@ -457,20 +457,23 @@ async fn hermes_interfaces_sdk_export_reapply_and_drift() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires explicit verified NEMOCLAW_TEST_BUNDLE"]
 async fn web_search_cli_export_reapply_and_destroy() {
-    let mut document =
-        Document::parse(include_str!("../../../examples/fabric-openclaw.yaml").as_bytes()).unwrap();
-    document.spec.integrations = serde_json::from_value(serde_json::json!({
-        "search":{"kind":"webSearch","provider":"brave","credential":{"env":"SEARCH_KEY"}}
-    }))
-    .unwrap();
-    document.spec.sandboxes[0].agent.integration_refs = vec!["search".into()];
-    lifecycle(&document.yaml().unwrap()).await;
-    document.spec.sandboxes[0].integrations = std::mem::take(&mut document.spec.integrations);
-    lifecycle(&document.yaml().unwrap()).await;
-    let sandbox = &mut document.spec.sandboxes[0];
-    sandbox.agent.integration_refs.clear();
-    sandbox.agent.integrations = std::mem::take(&mut sandbox.integrations);
-    lifecycle(&document.yaml().unwrap()).await;
+    for provider in ["tavily", "brave"] {
+        let mut document =
+            Document::parse(include_str!("../../../examples/fabric-openclaw.yaml").as_bytes())
+                .unwrap();
+        document.spec.integrations = serde_json::from_value(serde_json::json!({
+            "search":{"kind":"webSearch","provider":provider,"credential":{"env":"SEARCH_KEY"}}
+        }))
+        .unwrap();
+        document.spec.sandboxes[0].agent.integration_refs = vec!["search".into()];
+        lifecycle(&document.yaml().unwrap()).await;
+        document.spec.sandboxes[0].integrations = std::mem::take(&mut document.spec.integrations);
+        lifecycle(&document.yaml().unwrap()).await;
+        let sandbox = &mut document.spec.sandboxes[0];
+        sandbox.agent.integration_refs.clear();
+        sandbox.agent.integrations = std::mem::take(&mut sandbox.integrations);
+        lifecycle(&document.yaml().unwrap()).await;
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -536,10 +539,14 @@ async fn lifecycle_with_rejected_annotations(input: &str, reject_annotations: bo
             .path = Some("/docs/${file}/%{literal}".into());
     }
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
-    let has_search = !document.spec.sandboxes[0]
+    let search_provider = document.spec.sandboxes[0]
         .integration_bindings(&document.spec.integrations)
         .unwrap()
-        .is_empty();
+        .first()
+        .map(|binding| match binding.definition {
+            nemoclaw_sdk::config::Integration::WebSearch(search) => search.provider,
+        });
+    let has_search = search_provider.is_some();
     struct FixtureSecrets;
     impl nemoclaw_sdk::Secrets for FixtureSecrets {
         fn resolve(&self, name: &str) -> Result<String, nemoclaw_sdk::ObservationError> {
@@ -669,9 +676,9 @@ async fn lifecycle_with_rejected_annotations(input: &str, reject_annotations: bo
             .is_empty()
     );
     assert_eq!(fixture.state.lock().unwrap().effects, effects);
-    if has_search {
+    if let Some(search_provider) = search_provider {
         let state_bytes = fs::read(directory.path().join("terraform.tfstate")).unwrap();
-        let key = format!("{}/nemoclaw-brave", document.workspace());
+        let key = format!("{}/{}", document.workspace(), search_provider.profile());
         let profile = fixture.state.lock().unwrap().profiles[&key].clone();
         fixture
             .state
