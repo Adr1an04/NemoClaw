@@ -1157,7 +1157,7 @@ async fn apply_health_failure_retains_resources_and_unchanged_apply_checks_again
         "supported": true, "report": null, "reason_code": "fabric_health_timeout"
     }));
     let error = deployment.apply(&document, &cancel).await.unwrap_err();
-    assert!(matches!(error, nemoclaw_sdk::Error::Health { .. }));
+    assert!(matches!(error, nemoclaw_sdk::Error::Execution { .. }));
     // A later gateway failure must not be mistaken for this stored failed
     // health report, nor clear a mutation guard based on stale observations.
     let fixture_state = fixture.state.clone();
@@ -1173,7 +1173,7 @@ async fn apply_health_failure_retains_resources_and_unchanged_apply_checks_again
     fixture.state.lock().unwrap().driver = None;
     assert!(matches!(
         deployment.apply(&document, &cancel).await.unwrap_err(),
-        nemoclaw_sdk::Error::Health { .. }
+        nemoclaw_sdk::Error::Execution { .. }
     ));
     let before = fs::read(directory.path().join("terraform.tfstate")).unwrap();
     let effects = fixture.state.lock().unwrap().effects;
@@ -1215,15 +1215,13 @@ async fn apply_health_failure_retains_resources_and_unchanged_apply_checks_again
     assert!(failed.stderr.is_empty());
     let diagnostic: serde_json::Value = serde_json::from_slice(&failed.stdout).unwrap();
     assert_eq!(diagnostic["outcome"], "failed");
-    assert_eq!(
-        diagnostic["error"]["health"]["reason_code"],
-        "fabric_health_timeout"
-    );
+    assert!(diagnostic["error"].get("health").is_none());
+    assert!(!String::from_utf8_lossy(&failed.stdout).contains("fabric_health_timeout"));
     assert!(
         diagnostic["remainingState"]
             .as_str()
             .unwrap()
-            .contains("Resources retained")
+            .contains("preserve the deployment state directory")
     );
     fixture.state.lock().unwrap().health_report = None;
     let result = deployment.apply(&document, &cancel).await.unwrap();
@@ -1240,11 +1238,26 @@ async fn apply_health_failure_retains_resources_and_unchanged_apply_checks_again
             "reason_code": "accepting_work", "checks": []
         }
     }));
-    let result = deployment.apply(&document, &cancel).await.unwrap();
-    assert!(result.changes.is_empty());
+    let before_unsupported_report = fs::read(directory.path().join("terraform.tfstate")).unwrap();
+    assert!(matches!(
+        deployment.apply(&document, &cancel).await.unwrap_err(),
+        nemoclaw_sdk::Error::Execution { .. }
+    ));
+    let rejected = fs::read(directory.path().join("terraform.tfstate")).unwrap();
+    assert_same_managed_resources(&rejected, &before_unsupported_report);
+    let rejected: serde_json::Value = serde_json::from_slice(&rejected).unwrap();
+    let readiness = rejected["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|resource| resource["type"] == "nemoclaw_sandbox_readiness")
+        .unwrap();
+    let observation = &readiness["instances"][0]["attributes"];
+    assert_eq!(observation["ready"], false);
+    assert!(observation["health_json"].is_null());
     assert_eq!(
-        result.health[0].health.report.as_ref().unwrap()["activity"],
-        "busy"
+        observation["error_message"],
+        "invalid Fabric health response; resources retained"
     );
     let state = fixture.state.lock().unwrap();
     assert_eq!(state.effects, effects);

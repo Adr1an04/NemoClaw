@@ -162,14 +162,13 @@ Always inspect the operation's `deferred` list before treating the preview as co
 ## Read Apply Health
 
 `OperationResult.health` contains `SandboxHealth` observations, labeled with the sandbox and its sole agent.
-Each observation wraps `RuntimeHealth`: a `supported` flag, an optional Fabric `report`, and an optional bridge `reason_code`.
-The report uses Fabric's field names and retains check timestamps and dependency results.
+Each observation wraps `RuntimeHealth`: a `supported` flag, an optional `report`, and an optional bridge `reason_code`.
+The pinned bridge reports unsupported health with a null report; the SDK rejects unrecognized or proposed health reports.
 Other lifecycle operations leave this list empty.
 OpenTofu schedules the provider's sandbox completion observation; the SDK reads its recorded result without a second health request.
 
-`Error::Health { health }` retains the observation when supported health cannot establish readiness.
-The pinned image reports unsupported health locally because its Fabric version has no public health operation.
-Outer OpenShell transport failures and invalid reports use the existing error variants without copying raw diagnostics.
+OpenShell transport failures and invalid reports use the existing error variants without copying raw diagnostics.
+A failed apply preserves its original execution error and uses fresh readiness observations to establish whether mutations completed.
 No health failure deletes deployment resources.
 The compatibility behavior for the current Fabric pin and required agent image is described in [apply health](usage.md#fabric-health-during-apply).
 

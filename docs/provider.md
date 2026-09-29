@@ -231,15 +231,17 @@ See [runtime ownership](design/runtime.md) and [recovery](models.md#diagnose-and
 ## Sandbox Completion
 
 The OpenShell graph uses `nemoclaw_sandbox_readiness` after sandbox creation and any runtime configuration resource.
-Its required `sandbox` map carries the sandbox resource's binding and configuration; the provider checks startup and configuration before requesting Fabric health.
+Its required `sandbox` map carries the sandbox resource's binding and configuration; the provider checks startup and configuration before requesting the packaged bridge's health response.
 It does not invoke an agent or model.
 The optional string `read_trigger` uses `uuid()` in generated graphs, making the read unknown during planning and recording a fresh token on every apply.
 
 The data source returns `ready`, nullable `health_json`, and nullable `error_message`.
-Runtime observation failures return `ready: false` with an error message; a valid Fabric response is retained in `health_json`, including unsupported health.
+Runtime observation failures return `ready: false` with an error message.
+The pinned bridge's explicit unsupported response is retained in `health_json`; unrecognized reports are errors.
 The graph must enforce `ready` with a lifecycle postcondition: a data-source observation alone does not reject an unsuccessful result.
 Failed postconditions retain observations and resource bindings for recovery.
-The SDK reads these values through OpenTofu JSON and preserves structured Fabric health in its result or error.
+The SDK reads these values through OpenTofu JSON and includes the unsupported bridge response in successful apply results.
+Failures preserve ordinary execution or observation errors without an unverified health payload.
 SDK-generated graphs defer health until apply; export and teardown omit the observation.
 Standalone configurations with known inputs may read during planning unless the trigger defers them.
 Existing sandbox resource refresh still verifies configuration.

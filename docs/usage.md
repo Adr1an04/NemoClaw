@@ -81,24 +81,17 @@ It does not invoke agents, send generation requests, repair failures, or replay 
 Plan, export, and destroy do not request Fabric health.
 
 Each sandbox's `health` entry identifies its agent and runtime.
-When supported, `report` contains Fabric's liveness, activity, readiness, reasons, timestamps, and dependency observations.
-Fabric decides overall readiness; a busy runtime can pass if responsive and ready to accept work.
-An unsupported dependency is not a successful check.
-These observations do not test every inference route or integration.
-
-**Current limit:** the pinned Fabric lacks `runtime.check_health()`.
-New images report `supported: false`, `report: null`, and `reason_code: fabric_health_unsupported` locally, without contacting the running Fabric host.
-Apply retains its other configuration and readiness checks.
-Success therefore does not establish fresh Fabric health or working inference.
-Real adapter health qualification remains **TBD** until an accepted implementation is pinned and tested.
+The pinned Fabric has no health API.
+The packaged bridge reports `supported: false`, `report: null`, and `reason_code: fabric_health_unsupported` locally, without contacting the running Fabric host.
+Apply retains its other configuration and readiness checks; success does not establish fresh Fabric health or working inference.
+Real adapter health qualification remains **TBD** until an accepted owner API is pinned and tested.
 
 Use an [agent image built from this revision](build.md#build-agent-images); an older image missing the bridge fails with a rebuild diagnostic.
 Image changes require the [separate-deployment path](#choose-the-change-path); keep existing deployments' original bundles and state.
 
-Not-ready or unknown supported health, transport failures, and malformed reports fail apply and retain resources.
-For a supported health failure, the CLI exits with status 1 and reports the observation in the selected [output format](reference/cli.md#output-and-failure).
+Unexpected health reports, transport failures, and malformed responses fail apply and retain resources.
+The CLI exits with status 1 and reports the failure in the selected [output format](reference/cli.md#output-and-failure).
 Keep state, diagnose the failure, and explicitly reapply after recovery.
-Health is an observation at its recorded time, not a guarantee of future availability.
 
 ## Configuration and Credentials
 
