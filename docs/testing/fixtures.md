@@ -204,6 +204,7 @@ Run `cargo test -p nemoclaw-e2e --test remote_service -- --ignored` with `NEMOCL
 It checks read-only planning without host-capacity collection, failed startup recovery, missing-container replacement, no-op, export/reapply, cache reconstruction with unchanged credentials, and failed observation or credential-daemon retargeting without lost bindings.
 Destroy removes disposable containers and service networks while retaining storage.
 The partial-runtime fixtures verify teardown after failed creation without first creating the missing compute; failed readiness also permits corrected intent while retaining bindings.
+After export and unchanged reapply, the service fixture checks a complete resource plan with readiness reported separately as unverified, unchanged bindings, failed apply when readiness fails, and explicit recovery.
 
 Native CI runs these isolated fixtures on Unix, including managed OpenClaw, Hermes, Pi, and bearer-credential lifecycles.
 Its runtime status and Docker responses are simulated; it does not download or serve a model.

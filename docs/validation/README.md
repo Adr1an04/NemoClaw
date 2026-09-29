@@ -28,6 +28,7 @@ The subsequent [managed Podman qualification](rust-managed-podman-linux-arm64.md
 
 | Behavior | Tests and Results |
 |---|---|
+| Complete resource plans, unverified catalogs/readiness, and retained apply gates | [Linux ARM64 completeness fixtures](plan-completeness-linux-arm64.md) |
 | Brave and Tavily export, authored integration scopes, shared registrations, and drift refusal | [Linux ARM64 search export fixtures](web-search-export-linux-arm64.md) |
 | Short and colliding credentials, bounded diagnostics, and CLI failure recovery | [Linux ARM64 redaction fixtures](credential-redaction-linux-arm64.md) |
 | OpenClaw model/settings updates, retained files, safe failure reporting, and explicit retry | [Linux ARM64 OpenClaw qualification](openclaw-reconfiguration-linux-arm64.md) |

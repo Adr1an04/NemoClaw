@@ -163,6 +163,7 @@ The observation identifies control-host reachability, catalog authentication, an
 It does not establish sandbox reachability or generation, streaming, tool-calling, or model-loading behavior; `api_verified` remains false.
 Authentication denial is distinguished from a missing or unsupported model-list endpoint.
 Shared endpoint/API/credential-reference requests are deduplicated.
+The SDK reports unavailable or unverified catalogs under the plan result's `unverified` list, preserving their typed status without treating catalog availability as a resource-planning prerequisite.
 Onboarding adds observed identifiers to model suggestions while preserving manual model entry and accepted choices.
 
 Credentials remain a direct SDK concern: `observe_credentials` reports whether each selected reference resolves, separately from remote authentication.
@@ -220,6 +221,7 @@ Its optional `wait_timeout_seconds` accepts zero to 32400 seconds; omission mean
 Successful reads return `ready: true`; unsuccessful reads report an error.
 The optional `read_trigger` has the same scheduling semantics as the gateway trigger above.
 The compiler references the container's `id` and uses `timestamp() != ""` to defer readiness until apply, including unchanged apply.
+This apply-time read appears as `unverified` in SDK plan results; it does not make an otherwise resolved resource plan incomplete or relax the apply gate.
 The runtime graph must succeed before the SDK proceeds to the OpenShell graph.
 The OpenShell graph uses the same data source for Ollama proxies, with a 30-second wait and dependencies from their selected provider registrations.
 A proxy specification contains `kind: "ollama_proxy"`, an engine endpoint, and the compiled `proxy` specification.

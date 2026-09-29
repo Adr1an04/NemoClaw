@@ -55,6 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Inspect both `changes` and `deferred` in the result.
 An empty change list with deferred checks is not a complete no-change plan.
+The separate `unverified` list reports supplemental model-catalog or apply-time service-readiness checks; it does not make resource planning incomplete.
 The progress callback reports phase changes, `Progress::Resource`, `Progress::Waiting`, `Progress::Download`, and `Progress::Completed` events.
 Resource events adapt OpenTofu's machine-readable UI into fixed resource-kind, action, and status labels with an `elapsed` duration; raw messages, addresses, IDs, and output values are omitted.
 Resources of the same kind share a label.
@@ -71,7 +72,7 @@ A timed step reports when it returns, including cooperative cancellation; droppi
 
 | Method | Input and result | Effect |
 |---|---|---|
-| `plan(&document, &cancel)` | `OperationResult` with changes and any deferred checks | Observes and previews the desired deployment |
+| `plan(&document, &cancel)` | `OperationResult` with changes, deferred prerequisites, and unverified checks | Observes and previews the desired deployment |
 | `apply(&document, &cancel)` | `OperationResult` after checked planning/readiness | Can create/change resources, download models, and check readiness without generation |
 | `export(&cancel)` | Observed `Document`; call `yaml()` to serialize it | Checks retained intent and observations; does not back up native data |
 | `plan_destroy(&cancel)` | `OperationResult` from retained state | Previews owned workload removal and retained resources |
@@ -156,7 +157,12 @@ For each resource, `existed` means it appeared in retained state or the refreshe
 `retained` identifies an established resource retained by the owning teardown compiler, and `reusePlanned` means its plan is unchanged with no reported drift.
 These entries contain no resource IDs, specifications, or credential values.
 Retaining a workspace does not preserve sandbox files; see [retention](state.md#deletion-and-retention).
-Always inspect the operation's `deferred` list before treating the preview as complete.
+Always inspect the operation's `deferred` list before treating the resource preview as complete.
+`DiscoveryReport::deferred()` reports unresolved engine, hardware, image, and gateway prerequisites; missing credential references are added to `OperationResult.deferred`.
+`DiscoveryReport::unverified()` reports unavailable or unverified model catalogs and service readiness not confirmed by plan.
+The SDK copies those advisories into `OperationResult.unverified`, retaining full statuses and reasons in `discovery.observations`.
+A complete resource plan does not establish healthy services, successful catalog authentication, or working inference.
+Apply still enforces its readiness gates, including on unchanged deployments.
 
 ## Read Apply Health
 

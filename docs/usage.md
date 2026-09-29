@@ -265,9 +265,11 @@ nemoclaw plan --state-dir .local/deployment exported-new.yaml
 nemoclaw apply --state-dir .local/deployment exported-new.yaml
 ```
 
-For a fully observed unchanged deployment, expect `No resource changes planned.` with no deferred work.
-With `-o json`, this is an empty `changes` list and no `deferred` field.
+For a fully resolved resource plan with no changes, expect `No resource changes planned.` with no deferred work.
+With `-o json`, this is `complete: true`, an empty `changes` list, and no `deferred` field.
 Deferred work means the plan is incomplete, even if the current changes list is empty.
+Unavailable or unverified model catalogs and service readiness scheduled for apply appear separately under `unverified`; they do not make the resource plan incomplete.
+Review those advisories and the [typed observations](sdk.md#read-plan-discovery-and-resource-inventory); a complete plan does not establish service health or working inference.
 Unchanged apply still performs configuration and readiness checks; it can fail if a required service is unavailable.
 It does not send generation requests.
 Keep the original YAML until verification succeeds.

@@ -69,12 +69,14 @@ nemoclaw apply -o json --progress off --state-dir .local/deployment deployment.y
 nemoclaw plan --destroy -o json --progress off --state-dir .local/deployment
 ```
 
-Text plans identify resource actions, retained resources, and deferred work.
+Text plans identify resource actions, retained resources, deferred work, and unverified checks.
 Friendly labels replace known internal addresses; verbose output includes those addresses, and unknown resources keep their native identity.
 Normal output groups image bindings by action sequence; verbose output lists each binding.
 Deferred work produces a prominent incomplete-plan result even when the known change list is empty.
 A plan with deferred work returns 0 because the preview succeeded; scripts must also check `complete` before treating it as a complete plan.
-Unresolved engine, hardware, image, or endpoint discovery appears as deferred work; a known engine or image/adapter incompatibility rejects planning.
+Unresolved engine, hardware, image, or gateway prerequisites and missing credential references appear as deferred work; a known engine or image/adapter incompatibility rejects planning.
+Unavailable or unverified model catalogs and service readiness scheduled for apply appear under `unverified`, without making the resource plan incomplete.
+`complete: true` means resource planning has no deferred work; it does not establish service readiness or working inference.
 Failures refreshing managed-resource identity or required gateway observations still return a nonzero exit code.
 Text output summarizes resource reuse and drift, advertised models, and credential-reference availability; `--verbose` adds observation statuses.
 JSON output preserves the full discovery report, including query provenance and separate runtime/deployment resource scopes.
@@ -116,7 +118,8 @@ The CLI preserves the [SDK result fields](../../crates/nemoclaw-sdk/src/deployme
 | `complete` | Whether a planned result has no deferred work; inspect this alongside the exit code |
 | `changes` | Resource addresses and planned/applied action lists; an empty list does not mean apply skipped readiness checks |
 | `connection` | Plan/apply gateway endpoint and UID-derived workspace selectors; does not establish access or configure OpenShell CLI credentials |
-| `deferred` | Checks or changes deferred by planning; omitted when empty |
+| `deferred` | Unresolved planning prerequisites or resource stages; omitted when empty |
+| `unverified` | Supplemental catalog or apply-time service-readiness checks; does not change `complete`; omitted when empty |
 | `discovery` | Plan query targets, typed observations, credential-reference availability, and resource inventory; see the [SDK report contract](../sdk.md#read-plan-discovery-and-resource-inventory); omitted when empty |
 | `health` | Apply health responses from the packaged Fabric bridge; currently unsupported; omitted for other operations |
 | `retained` | Retained resource addresses reported by the operation; omitted when empty and not an inventory of every surviving file or external service |
