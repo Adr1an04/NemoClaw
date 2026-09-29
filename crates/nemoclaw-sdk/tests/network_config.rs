@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 use nemoclaw_sdk::{
     compile::{Generations, targets},
-    config::{Document, Network, NetworkPolicy, Proxy, schema::input_schema},
+    config::{Document, Network, NetworkPolicy, schema::input_schema},
 };
 use serde_json::{Value, json};
 
@@ -16,8 +16,7 @@ fn input() -> Value {
             "landlock": {"compatibility": "best_effort"},
             "process": {"run_as_user": "1000", "run_as_group": "1000"},
             "network_policies": {"docs": {"name": "docs", "endpoints": [{"host": "docs.example.com", "port": 443, "protocol": "rest", "tls": "terminate", "enforcement": "enforce", "rules": [{"allow": {"method": "GET", "path": "/docs/**"}}]}], "binaries": [{"path": "/usr/bin/curl"}]}}
-        }},
-        "proxy": {"host": "10.200.0.1", "port": 3129}
+        }}
     });
     value
 }
@@ -25,7 +24,21 @@ fn parse(value: &Value) -> Result<Document, nemoclaw_sdk::config::ConfigError> {
     Document::parse(serde_json::to_vec(value).unwrap().as_slice())
 }
 #[test]
-fn explicit_policy_and_proxy_survive_yaml_and_compilation() {
+fn sandbox_proxy_override_is_rejected_before_deployment() {
+    let mut value = input();
+    value["spec"]["sandboxes"][0]["network"]["proxy"] = json!({"host": "10.200.0.1", "port": 3129});
+    assert!(
+        parse(&value).is_err(),
+        "sandbox proxy overrides must not replace OpenShell's policy proxy"
+    );
+    assert!(
+        !jsonschema::validator_for(&input_schema())
+            .unwrap()
+            .is_valid(&value)
+    );
+}
+#[test]
+fn explicit_policy_survives_yaml_and_compilation() {
     let value = input();
     let validator = jsonschema::validator_for(&input_schema()).unwrap();
     assert!(
@@ -51,19 +64,11 @@ fn explicit_policy_and_proxy_survive_yaml_and_compilation() {
         policy["network_policies"]["docs"]["endpoints"][0]["rules"][0]["allow"]["method"],
         "GET"
     );
-    assert_eq!(sandbox["proxy_host"], "10.200.0.1");
-    assert_eq!(sandbox["proxy_port"], "3129");
 }
 #[test]
 fn conflicting_unknown_and_invalid_network_settings_are_rejected() {
     for (path, replacement) in [
         ("/spec/sandboxes/0/network/tier", json!("isolated")),
-        (
-            "/spec/sandboxes/0/network/proxy/host",
-            json!("user:secret@proxy"),
-        ),
-        ("/spec/sandboxes/0/network/proxy/port", json!(0)),
-        ("/spec/sandboxes/0/network/proxy/port", json!(65536)),
         (
             "/spec/sandboxes/0/network/policy/explicit/version",
             json!(0),
@@ -328,7 +333,7 @@ fn default_network_is_a_valid_isolated_policy() {
 }
 
 #[test]
-fn policy_choice_and_proxy_are_independent_and_keep_the_export_shape() {
+fn policy_choice_preserves_the_export_shape() {
     let explicit_input = input()["spec"]["sandboxes"][0]["network"]["policy"].clone();
     let explicit = serde_json::from_value(explicit_input["explicit"].clone()).unwrap();
     for (policy, expected) in [
@@ -338,36 +343,12 @@ fn policy_choice_and_proxy_are_independent_and_keep_the_export_shape() {
             json!({"policy": explicit_input}),
         ),
     ] {
-        for proxy in [
-            None,
-            Some(Proxy {
-                host: "proxy.example.com".into(),
-                port: 3128,
-            }),
-        ] {
-            let network = Network {
-                policy: policy.clone(),
-                proxy: proxy.clone(),
-            };
-            network.validate().unwrap();
-            let mut expected = expected.clone();
-            if let Some(proxy) = &proxy {
-                expected["proxy"] = serde_json::to_value(proxy).unwrap();
-            }
-            assert_eq!(serde_json::to_value(&network).unwrap(), expected);
-            assert_eq!(
-                serde_json::from_value::<Network>(expected).unwrap(),
-                network
-            );
-            assert_eq!(
-                network.policy_proto().unwrap(),
-                Network {
-                    policy: policy.clone(),
-                    proxy: None
-                }
-                .policy_proto()
-                .unwrap()
-            );
-        }
+        let network = Network { policy };
+        network.validate().unwrap();
+        assert_eq!(serde_json::to_value(&network).unwrap(), expected);
+        assert_eq!(
+            serde_json::from_value::<Network>(expected).unwrap(),
+            network
+        );
     }
 }

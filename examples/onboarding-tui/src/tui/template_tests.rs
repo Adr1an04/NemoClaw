@@ -295,7 +295,7 @@ fn model_token_limit_is_editable_without_changing_native_settings() {
 }
 
 #[test]
-fn explicit_policy_is_editable_without_changing_gateway_or_proxy() {
+fn explicit_policy_is_editable_without_changing_gateway() {
     let (_, wizard) = template_wizard("explicit-policy.yaml");
     let document = serde_json::to_value(wizard.draft().document()).unwrap();
     let path = "/spec/sandboxes/0/network/policy";

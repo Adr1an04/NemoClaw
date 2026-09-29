@@ -378,8 +378,6 @@ impl Provider for NemoClawProvider {
                     "agent_name",
                     "agent_runtime",
                     "policy_json",
-                    "proxy_host",
-                    "proxy_port",
                     "provider_names_json",
                 ],
                 &[],

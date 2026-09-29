@@ -139,10 +139,6 @@ fn targets_with_plans(
             crate::openshell::policy_json(&policy)
                 .map_err(|_| ConfigError::new("cannot encode sandbox policy"))?,
         );
-        if let Some(proxy) = &sandbox.network.proxy {
-            values.insert("proxy_host".into(), proxy.host.clone());
-            values.insert("proxy_port".into(), proxy.port.to_string());
-        }
         {
             result.push(Target {
                 kind: "agent_configuration".into(),

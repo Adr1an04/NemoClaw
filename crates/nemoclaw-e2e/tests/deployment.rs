@@ -828,12 +828,12 @@ async fn lifecycle_with_rejected_annotations(input: &str, reject_annotations: bo
         nemoclaw_sdk::config::NetworkPolicy::Explicit(_)
     ) {
         let mut changed = document.clone();
-        changed.spec.sandboxes[0]
-            .network
-            .proxy
-            .as_mut()
-            .unwrap()
-            .port = 3129;
+        let nemoclaw_sdk::config::NetworkPolicy::Explicit(policy) =
+            &mut changed.spec.sandboxes[0].network.policy
+        else {
+            unreachable!()
+        };
+        policy.network_policies.clear();
         assert!(deployment.plan(&changed, &cancel).await.is_err());
         assert_eq!(fixture.state.lock().unwrap().effects, effects);
         let key = format!(

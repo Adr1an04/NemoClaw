@@ -190,12 +190,6 @@ pub(super) fn constrain(root: &mut Value, normalized: bool) {
     );
     defs["Network"]["if"] = json!({"required": ["policy"]});
     defs["Network"]["then"] = json!({"properties": {"tier": {"const": ""}}});
-    property(
-        &mut defs["Proxy"],
-        "host",
-        json!({"pattern": "^[A-Za-z0-9._-]+$", "minLength": 1, "maxLength": 256}),
-    );
-    property(&mut defs["Proxy"], "port", json!({"minimum": 1}));
     property(&mut defs["ExplicitPolicy"], "version", json!({"const": 1}));
     property(
         &mut defs["PolicyLandlock"],

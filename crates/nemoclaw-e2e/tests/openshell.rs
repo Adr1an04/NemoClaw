@@ -421,7 +421,7 @@ async fn failed_readback_retains_each_created_identity_until_explicit_recovery()
 }
 
 #[tokio::test]
-async fn explicit_policy_and_proxy_reach_the_gateway_and_detect_drift() {
+async fn explicit_policy_reaches_the_gateway_and_detects_drift() {
     let fixture = Fixture::start().await;
     let mut document =
         Document::parse(include_bytes!("../../../examples/explicit-policy.yaml").as_slice())
@@ -456,12 +456,8 @@ async fn explicit_policy_and_proxy_reach_the_gateway_and_detect_drift() {
         nemoclaw_sdk::openshell::policy_json(spec.policy.as_ref().unwrap()).unwrap(),
         sandbox["policy_json"]
     );
-    assert_eq!(spec.command[0], "/usr/bin/env");
-    assert!(
-        spec.command
-            .contains(&"HTTPS_PROXY=http://10.200.0.1:3128".into())
-    );
-    assert_eq!(spec.environment["NEMOCLAW_PROXY_PORT"], "3128");
+    assert!(!spec.command.iter().any(|arg| arg.contains("PROXY=")));
+    assert!(!spec.environment.keys().any(|key| key.contains("PROXY")));
     let effects = fixture.state.lock().unwrap().effects;
     assert!(client.ensure("sandbox", sandbox).await.error().is_none());
     assert_eq!(fixture.state.lock().unwrap().effects, effects);

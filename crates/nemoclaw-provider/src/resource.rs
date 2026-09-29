@@ -44,8 +44,6 @@ impl ResourceAdapter {
                     | "agent_runtime"
                     | "provider_type"
                     | "policy_json"
-                    | "proxy_host"
-                    | "proxy_port"
                     | "provider_names_json"
             )
     }

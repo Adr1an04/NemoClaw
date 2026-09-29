@@ -339,7 +339,7 @@ impl Backend for OpenShell {
         {
             return Mutation::failed(ObservationError::Incomplete);
         }
-        if kind == "sandbox" && (row_policy(desired).is_err() || row_proxy(desired).is_err()) {
+        if kind == "sandbox" && row_policy(desired).is_err() {
             return Mutation::failed(ObservationError::Query);
         }
         self.reconcile(kind, desired)

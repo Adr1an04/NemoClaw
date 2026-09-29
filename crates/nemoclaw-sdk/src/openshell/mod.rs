@@ -14,7 +14,7 @@ pub use native_profile::definition as inference_profile;
 pub use network::policy_json;
 mod inference;
 use inference::{PROVIDERS_ENV, inference_environment};
-use network::{launch_command, launch_environment, observed_proxy, row_policy, row_proxy};
+use network::row_policy;
 mod gateway;
 mod transport;
 use crate::{ObservationError, backend::Row};
@@ -188,9 +188,8 @@ fn sandbox_row(
     let spec = sandbox.spec.ok_or(ObservationError::Incomplete)?;
     let image = spec.template.ok_or(ObservationError::Incomplete)?.image;
     let environment: Row = spec.environment.into_iter().collect();
-    let proxy = observed_proxy(&environment)?;
     let inference = environment.get(PROVIDERS_ENV).cloned().unwrap_or_default();
-    let mut expected_environment = launch_environment(agent, &runtime, proxy.as_ref());
+    let mut expected_environment = self::environment(agent, &runtime);
     if !inference.is_empty() {
         expected_environment.insert(PROVIDERS_ENV.into(), inference.clone());
     }
@@ -199,9 +198,7 @@ fn sandbox_row(
     if spec.providers != expected_providers {
         return Err(ObservationError::BindingMismatch);
     }
-    if image.is_empty()
-        || spec.command != launch_command(&runtime, proxy.as_ref())
-        || environment != expected_environment
+    if image.is_empty() || spec.command != command(&runtime) || environment != expected_environment
     {
         return Err(ObservationError::BindingMismatch);
     }
@@ -217,14 +214,6 @@ fn sandbox_row(
     row.insert("provider_names_json".into(), inference);
     row.insert("image".into(), image);
     row.insert("policy_json".into(), policy);
-    row.insert(
-        "proxy_host".into(),
-        proxy.as_ref().map(|p| p.host.clone()).unwrap_or_default(),
-    );
-    row.insert(
-        "proxy_port".into(),
-        proxy.map(|p| p.port.to_string()).unwrap_or_default(),
-    );
     // Phase is used by active checks, but is not a Terraform schema attribute.
     Ok((row, ready))
 }

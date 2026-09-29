@@ -28,7 +28,7 @@ Use the [validation matrix](validation/README.md) to distinguish tested configur
 | Locate deployment state and understand backup limits | [Deployment state](state.md) |
 | Diagnose a failed operation | [Troubleshooting](troubleshooting.md) |
 | Review trust, credential storage and access, and isolation | [Security](security.md) |
-| Declare sandbox filesystem, process, egress, and proxy settings | [Sandbox policy and proxy](sandbox-network.md) |
+| Declare sandbox filesystem, process, and egress settings | [Sandbox policy](sandbox-network.md) |
 
 ## Agents and Inference
 

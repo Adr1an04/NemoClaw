@@ -13,15 +13,13 @@ use openshell_sdk::raw::proto;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// Sandbox policy selection and optional agent HTTP proxy.
+/// Sandbox policy selection.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "NetworkInput", into = "NetworkInput")]
 #[schemars(with = "NetworkInput")]
 pub struct Network {
     /// Isolated preset or a complete authored policy; the two cannot coexist.
     pub policy: NetworkPolicy,
-    /// Existing HTTP proxy used by the agent, independent of policy selection.
-    pub proxy: Option<Proxy>,
 }
 
 /// Sandbox policy source. Explicit policies replace the isolated preset completely.
@@ -39,7 +37,7 @@ pub enum NetworkPolicy {
 #[derive(Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[schemars(!default, rename = "Network")]
 #[serde(default, deny_unknown_fields)]
-/// Sandbox policy selection and optional agent HTTP proxy.
+/// Sandbox policy selection.
 struct NetworkInput {
     #[serde(rename = "tier")]
     #[schemars(default)]
@@ -50,10 +48,6 @@ struct NetworkInput {
     #[schemars(default, with = "ExplicitPolicySelection")]
     /// Complete authored OpenShell policy, replacing the isolated preset.
     policy: Option<ExplicitPolicySelection>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(default, with = "Proxy")]
-    /// HTTP proxy address used by the agent process. Does not create a proxy or change gateway networking.
-    proxy: Option<Proxy>,
 }
 
 impl TryFrom<NetworkInput> for Network {
@@ -69,10 +63,7 @@ impl TryFrom<NetworkInput> for Network {
                 ));
             }
         };
-        Ok(Self {
-            policy,
-            proxy: input.proxy,
-        })
+        Ok(Self { policy })
     }
 }
 
@@ -84,11 +75,7 @@ impl From<Network> for NetworkInput {
                 (String::new(), Some(ExplicitPolicySelection { explicit }))
             }
         };
-        Self {
-            tier,
-            policy,
-            proxy: network.proxy,
-        }
+        Self { tier, policy }
     }
 }
 
@@ -98,16 +85,6 @@ impl From<Network> for NetworkInput {
 struct ExplicitPolicySelection {
     /// Complete sandbox policy in OpenShell YAML field names.
     explicit: ExplicitPolicy,
-}
-
-/// Existing agent HTTP proxy, reachable from inside the sandbox. NemoClaw does not manage it. Credentials and URL syntax are excluded.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct Proxy {
-    /// Proxy hostname or IPv4 address, without scheme, path, or credentials.
-    pub host: String,
-    /// Proxy TCP port, from 1 through 65535.
-    pub port: u16,
 }
 
 /// Credential-free OpenShell policy. Validation and protocol conversion use the pinned OpenShell policy library.
@@ -342,11 +319,6 @@ pub struct PolicyMcp {
     pub allow_all_known_mcp_methods: Option<bool>,
 }
 
-impl Proxy {
-    pub fn validate(&self) -> Result<(), ConfigError> {
-        super::schema::validate_definition("Proxy", self)
-    }
-}
 impl Network {
     pub(crate) fn validate_runtime_access(&self) -> Result<(), ConfigError> {
         let NetworkPolicy::Explicit(policy) = &self.policy else {

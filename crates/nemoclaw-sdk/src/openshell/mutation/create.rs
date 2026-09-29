@@ -62,10 +62,7 @@ impl OpenShell {
                         image: value(want, "image").into(),
                         ..Default::default()
                     }),
-                    command: launch_command(
-                        value(want, "agent_runtime"),
-                        row_proxy(want)?.as_ref(),
-                    ),
+                    command: command(value(want, "agent_runtime")),
                     providers: inference::provider_names(
                         value(want, "provider_names_json"),
                         value(want, "agent_runtime"),
