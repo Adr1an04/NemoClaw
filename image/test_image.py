@@ -21,6 +21,16 @@ class AgentImage(unittest.TestCase):
         self.assertTrue(actual["adapters"], "image installs no discoverable Fabric adapter")
         self.assertEqual(json.loads(os.environ["NEMOCLAW_TEST_CATALOG"]), actual)
 
+    @unittest.skipUnless(os.environ.get("NEMOCLAW_TEST_HARNESS") == "hermes", "Hermes image only")
+    def test_hermes_accepts_fabric_request_metadata(self):
+        from gateway.platforms.api_server import _request_relay_metadata
+
+        metadata = {"request_id": "image-qualification", "context": {"tenant": "owned"}}
+        extracted = _request_relay_metadata({"metadata": metadata})
+        self.assertEqual(extracted, metadata)
+        self.assertIsNot(extracted, metadata)
+        self.assertEqual(_request_relay_metadata({"metadata": "invalid"}), {})
+
     def test_runtime_retains_matching_sources_without_build_toolchains(self):
         root = Path("/opt/nemoclaw")
         manifest = json.loads((root / "provenance.json").read_text())

@@ -93,7 +93,12 @@ FROM base AS hermes-assets
 ARG HERMES_REVISION=29112bef099274229cadff79cdff7bf7b99c4b77
 ARG HERMES_SHA256=76b99a8be9b77d66833c3cfe2b35c6d6f6a58e4ff9637ef8effcfc1f420ab35a
 ADD --checksum=sha256:${HERMES_SHA256} https://codeload.github.com/NousResearch/hermes-agent/tar.gz/${HERMES_REVISION} /sources/hermes.tar.gz
-RUN mkdir -p /opt/hermes && tar -xzf /sources/hermes.tar.gz -C /opt/hermes --strip-components=1
+COPY --from=common-wheels /src/fabric/adapters/python/hermes/metadata-propagate.patch /sources/metadata-propagate.patch
+COPY image/fabric/HERMES-NOTICE.md /sources/HERMES-NOTICE.md
+RUN apt-get update && apt-get install -y --no-install-recommends patch && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /opt/hermes && tar -xzf /sources/hermes.tar.gz -C /opt/hermes --strip-components=1 \
+    && patch --batch --fuzz=0 -d /opt/hermes -p1 < /sources/metadata-propagate.patch \
+    && cp /sources/HERMES-NOTICE.md /opt/hermes/NEMOCLAW-NOTICE.md
 RUN --mount=type=cache,target=/root/.npm \
     npm install --global npm@11.17.0 \
     && cd /opt/hermes/web && npm ci --ignore-scripts && npm run build \
