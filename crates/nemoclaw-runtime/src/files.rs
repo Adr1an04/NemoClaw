@@ -4,7 +4,7 @@ use crate::Error;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{
-    fs::{self, File},
+    fs::File,
     io::{Read, Write},
     path::Path,
 };
@@ -16,7 +16,7 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), Error> {
     {
         use std::os::unix::fs::PermissionsExt;
         file.as_file()
-            .set_permissions(fs::Permissions::from_mode(0o600))
+            .set_permissions(std::fs::Permissions::from_mode(0o600))
             .map_err(|_| Error::State("cannot protect state file"))?;
     }
     file.write_all(bytes)

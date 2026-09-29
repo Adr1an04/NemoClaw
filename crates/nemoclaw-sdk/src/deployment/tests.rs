@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-use crate::config::{ComputeDriver, Gateway};
+use crate::config::Gateway;
 
 use super::*;
 
@@ -427,9 +427,11 @@ fn gateway_replacement_preserves_the_old_binding_and_rejects_other_actions() {
     }
 }
 
+#[cfg(unix)]
 #[tokio::test]
 #[ignore = "creates and removes only an explicitly configured test gateway; retains its storage"]
 async fn managed_gateway_plan_apply_noop_destroy_and_recovery_use_real_opentofu() {
+    use crate::config::ComputeDriver;
     let path =
         |name| PathBuf::from(std::env::var_os(name).expect("explicit managed qualification path"));
     let mut document =
