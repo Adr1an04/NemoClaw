@@ -3,6 +3,9 @@
 
 #![cfg(unix)]
 
+#[path = "managed_gateway_live/profile_revision.rs"]
+mod profile_revision;
+
 use bollard::{Docker, query_parameters::CreateContainerOptions};
 use nemoclaw_provider::docker::Engine;
 use nemoclaw_sdk::{
