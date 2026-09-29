@@ -117,3 +117,23 @@ fn fabric_planner_uses_the_same_immutable_owner_revision_as_image_discovery() {
     );
     assert!(dependency.get("path").is_none());
 }
+
+#[test]
+fn current_openshell_contract_links_match_the_artifact_revision() {
+    let pins: serde_json::Value =
+        serde_json::from_str(include_str!("../../../versions.json")).unwrap();
+    let revision = pins["openshellRevision"].as_str().unwrap();
+    // These pages describe the current contract. Historical validation and
+    // source notices retain the revisions that their evidence came from.
+    for page in [
+        include_str!("../../../docs/sandbox-network.md"),
+        include_str!("../../../docs/design/architecture.md"),
+    ] {
+        for link in page
+            .split("https://github.com/NVIDIA/OpenShell/blob/")
+            .skip(1)
+        {
+            assert_eq!(link.split('/').next().unwrap(), revision);
+        }
+    }
+}
