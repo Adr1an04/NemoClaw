@@ -12,14 +12,41 @@ from pathlib import Path
 
 from nemo_fabric import DiscoveryConfig, Fabric
 
+# Harness image stages write the directories their layout places each adapter's
+# runtime in, so deployment planning can check explicit filesystem grants.
+RUNTIME_FILES = Path("/opt/nemoclaw/runtime-files.json")
 
-def snapshot(revision, source_sha256, *, discovery=None, installed_only=False):
+
+def read_runtime_files(path, adapters):
+    """Return image-owned read paths, keyed by an adapter in this catalog."""
+    if not path.exists():
+        return {}
+    declared = json.loads(path.read_text())
+    cataloged = {record["descriptor"]["adapter_id"] for record in adapters}
+    for adapter_id, files in declared.items():
+        if adapter_id not in cataloged:
+            raise ValueError(f"{path} names {adapter_id}, which this catalog does not list")
+        if (
+            not isinstance(files, list)
+            or not files
+            or not all(
+                isinstance(file, str) and file.startswith("/") and ".." not in file.split("/")
+                for file in files
+            )
+        ):
+            raise ValueError(f"{path} must list absolute paths for {adapter_id}")
+    return declared
+
+
+def snapshot(
+    revision, source_sha256, *, discovery=None, installed_only=False, runtime_files=RUNTIME_FILES
+):
     fabric = Fabric()
     records = {
         "adapters": fabric.discover(discovery=discovery),
         "targets": fabric.discover_targets(discovery=discovery),
     }
-    return {
+    catalog = {
         "schema_version": 2,
         "fabric_revision": revision,
         "source_sha256": source_sha256,
@@ -33,6 +60,11 @@ def snapshot(revision, source_sha256, *, discovery=None, installed_only=False):
             for kind, items in records.items()
         },
     }
+    # Kept beside the descriptors so Fabric's records stay unedited.
+    files = read_runtime_files(runtime_files, catalog["adapters"])
+    if files:
+        catalog["runtime_files"] = files
+    return catalog
 
 
 def main():

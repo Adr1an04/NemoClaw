@@ -145,16 +145,51 @@ pub fn assess_fabric(catalog: &FabricCatalog, request: &FabricRequirements) -> C
     if let (Ok(plan), Some(grants)) = (&result, &request.filesystem_read)
         && let Some(descriptor) = &plan.adapter_descriptor
     {
-        for file in &descriptor.descriptor.requirements.files {
-            let allowed = file.is_absolute() && grants.iter().any(|grant| file.starts_with(grant));
-            checks.push(check(
-                "deployment_filesystem_grant",
-                if allowed {
+        // Fabric declares the adapter's own files; the image build declares
+        // where its layout installs the harness. The policy must allow both.
+        let image_files = catalog
+            .runtime_files
+            .get(&descriptor.descriptor.adapter_id)
+            .into_iter()
+            .flatten();
+        for file in descriptor
+            .descriptor
+            .requirements
+            .files
+            .iter()
+            .chain(image_files)
+        {
+            // These are Linux sandbox paths, including on Windows clients.
+            let allowed = file.to_str().is_some_and(|path| {
+                path.starts_with('/')
+                    && !path.split('/').any(|part| part == "..")
+                    && grants.iter().any(|grant| {
+                        if !grant.starts_with('/') || grant.split('/').any(|part| part == "..") {
+                            return false;
+                        }
+                        let mut required = path
+                            .split('/')
+                            .filter(|part| !part.is_empty() && *part != ".");
+                        grant
+                            .split('/')
+                            .filter(|part| !part.is_empty() && *part != ".")
+                            .all(|part| required.next() == Some(part))
+                    })
+            });
+            let path = file.display();
+            checks.push(CapabilityCheck {
+                requirement: "deployment_filesystem_grant".into(),
+                status: if allowed {
                     Support::Supported
                 } else {
                     Support::Unsupported
                 },
-            ));
+                reason: if allowed {
+                    format!("explicit filesystem policy grants read access to {path}")
+                } else {
+                    format!("explicit filesystem policy must grant read access to {path}")
+                },
+            });
         }
     }
     CompatibilityReport {

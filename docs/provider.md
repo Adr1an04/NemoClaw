@@ -125,6 +125,8 @@ Omitting requirements preserves metadata-only discovery.
 
 The [agent image builder](build.md#build-agent-images) reads `Fabric.discover()` inside each assembled image and stores the result in `io.nemoclaw.fabric.catalog`.
 It selects installed-package records using Fabric's provenance, without editing their descriptors.
+Harness image stages declare the directories where their layout installs each adapter; the builder records them as `runtime_files`, keyed by adapter ID, beside the descriptors.
+With deployment filesystem grants, every path in the adapter descriptor's `requirements.files` and in its `runtime_files` entry must fall under a grant.
 The bundled snapshot supports offline authoring and carries the same pinned Fabric revision and source checksum.
 See [source notices and regeneration](../image/NOTICE.md).
 Older images and direct Bake builds without labels remain unverified.

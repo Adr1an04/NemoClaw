@@ -36,11 +36,15 @@ Kernel enforcement still requires qualification on the deployment host.
 
 ## Runtime Filesystem Access
 
-When an explicit policy declares `filesystem_policy`, both plan and apply check that it permits reads of `/opt/fabric` and `/opt/nemoclaw` before opening deployment state or contacting runtime services.
-Selected-image assessment also checks the files declared by the Fabric descriptor.
-The pinned descriptors do not establish every native runtime directory; an empty requirements list does not prove complete filesystem access.
-Verify additional harness paths against the selected image before applying.
-The same check applies to inline harnesses and `harnessRef`, separately for every sandbox.
+When an explicit policy declares `filesystem_policy`, NemoClaw checks that it permits reads of the selected harness's runtime directories.
+The same checks apply to inline harnesses and `harnessRef`, separately for every sandbox.
+
+- Plan and apply check `/opt/fabric` and `/opt/nemoclaw`, which every harness requires, before opening deployment state or contacting runtime services.
+- Selected-image assessment checks the files declared by the Fabric descriptor and the runtime directories that the image's catalog records for its adapter: `/app` for OpenClaw, `/opt/hermes` for Hermes, and `/opt/fabric-source` for Pi.
+  A missing grant makes the sandbox's compatibility `unsupported` and fails plan; `observation_json.compatibility` names the path.
+  Images without a catalog label, such as older images and direct Bake builds, skip this check.
+
+These checks do not establish every path a harness reads; verify additional harness paths against the selected image before applying.
 
 A read-only or read-write grant for the directory or a parent directory satisfies the check.
 For example, `/opt` covers the runtime directories beneath it; `/opt/fabric-source` does not cover `/opt/fabric`.
@@ -48,9 +52,9 @@ Use absolute sandbox paths without `..`; validation does not resolve image symli
 `include_workdir` does not grant access to these runtime directories.
 An omitted `filesystem_policy` retains OpenShell defaults and is outside this explicit-grant check.
 
-An error names the required path; edit the authored policy and rerun plan.
+Each error names the required path; edit the authored policy and rerun plan.
 NemoClaw does not add filesystem grants automatically.
-This check does not verify image contents, Unix permissions, writable state directories, or kernel enforcement; those still require runtime verification.
+These checks do not verify image contents, Unix permissions, writable state directories, or kernel enforcement; those still require runtime verification.
 
 ## Choose TLS Inspection and Enforcement
 

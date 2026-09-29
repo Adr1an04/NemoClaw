@@ -19,6 +19,7 @@ fn catalog() -> FabricCatalog {
             "model_schema":{"type":"object","properties":{"provider":{"const":"openai"},"model":{"pattern":"^fixture-"}},"required":["provider","model"]},
             "config":{"accepts":["models"]}}),
         }],
+        runtime_files: Default::default(),
     }
 }
 fn config() -> serde_json::Value {
@@ -117,4 +118,45 @@ fn canonical_workflow_targets_are_planned_from_the_image_snapshot_only() {
     request["workflow"]["settings"]["budget"] = 4.into();
     let absent = FabricCatalog::from_json(&raw.to_string()).unwrap();
     assert!(plan_configuration(&absent, request).is_err());
+}
+
+#[test]
+fn explicit_filesystem_policy_must_allow_the_image_runtime_directory() {
+    use nemoclaw_sdk::fabric_capabilities::{
+        CapabilityCheck, FabricRequirements, Support, assess_fabric,
+    };
+    let mut catalog = catalog();
+    catalog
+        .runtime_files
+        .insert("org.fixture.new-adapter".into(), vec!["/opt/hermes".into()]);
+    let grants = |grants: Vec<&str>| FabricRequirements {
+        configuration: config(),
+        filesystem_read: Some(grants.into_iter().map(str::to_owned).collect()),
+    };
+    let report = assess_fabric(
+        &catalog,
+        &grants(vec!["/usr", "/opt/fabric", "/opt/nemoclaw"]),
+    );
+    assert_eq!(report.status, Support::Unsupported);
+    assert!(report.checks.contains(&CapabilityCheck {
+        requirement: "deployment_filesystem_grant".into(),
+        status: Support::Unsupported,
+        reason: "explicit filesystem policy must grant read access to /opt/hermes".into(),
+    }));
+    assert_eq!(
+        assess_fabric(&catalog, &grants(vec!["/opt/hermes/web"])).status,
+        Support::Unsupported
+    );
+    assert_eq!(
+        assess_fabric(&catalog, &grants(vec!["/usr", "/opt"])).status,
+        Support::Supported
+    );
+    let without_policy = FabricRequirements {
+        configuration: config(),
+        filesystem_read: None,
+    };
+    assert_eq!(
+        assess_fabric(&catalog, &without_policy).status,
+        Support::Supported
+    );
 }

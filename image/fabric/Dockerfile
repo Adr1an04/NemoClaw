@@ -88,6 +88,8 @@ RUN mkdir -p /opt/nemoclaw/plugins/tavily/node_modules \
     && ln -s /app /opt/nemoclaw/plugins/tavily/node_modules/openclaw && rm /tmp/tavily.tgz
 COPY image/fabric/TAVILY-LICENSE /opt/nemoclaw/plugins/tavily/LICENSE
 COPY image/fabric/TAVILY-NOTICE.md /opt/nemoclaw/plugins/tavily/NOTICE.md
+# catalog.py records this layout so planning checks explicit filesystem grants.
+RUN printf '%s\n' '{"nvidia.fabric.openclaw": ["/app"]}' > /opt/nemoclaw/runtime-files.json
 USER node
 
 FROM base AS hermes-assets
@@ -112,6 +114,7 @@ COPY --from=hermes-assets --chmod=0644 /sources/hermes.tar.gz /opt/nemoclaw/sour
 RUN /opt/fabric/bin/pip install --no-index --no-deps --no-build-isolation -e /opt/hermes --config-settings editable_mode=compat
 COPY --from=common-wheels /src/fabric/adapters/python/hermes/src/nemo_fabric_adapters/hermes/plugins/tavily/ /opt/hermes/plugins/web/tavily/
 ENV HERMES_DISABLE_LAZY_INSTALLS=1
+RUN printf '%s\n' '{"nvidia.fabric.hermes": ["/opt/hermes"]}' > /opt/nemoclaw/runtime-files.json
 USER node
 
 FROM common-wheels AS pi-build
@@ -141,7 +144,8 @@ COPY --from=pi-build /opt/pi /opt/fabric-source
 # Its runner script resolves beside the real file under /opt/fabric-source.
 RUN mkdir -p /opt/fabric/share/nemo-fabric/adapters/pi \
     && ln -s /opt/fabric-source/adapters/typescript/pi/pi.fabric-adapter.json \
-        /opt/fabric/share/nemo-fabric/adapters/pi/pi.fabric-adapter.json
+        /opt/fabric/share/nemo-fabric/adapters/pi/pi.fabric-adapter.json \
+    && printf '%s\n' '{"nvidia.fabric.pi": ["/opt/fabric-source"]}' > /opt/nemoclaw/runtime-files.json
 USER node
 
 FROM base AS lint

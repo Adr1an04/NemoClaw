@@ -4,6 +4,8 @@
 //! Fabric descriptor metadata, without importing adapters or starting runtimes.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 pub const IMAGE_CATALOG_LABEL: &str = "io.nemoclaw.fabric.catalog";
 
@@ -17,6 +19,11 @@ pub struct FabricCatalog {
     pub adapters: Vec<FabricAdapter>,
     #[serde(default)]
     pub targets: Vec<serde_json::Value>,
+    /// Absolute paths an adapter reads in this image, keyed by adapter ID.
+    /// The image build records its own layout here and leaves Fabric's
+    /// descriptors unedited; the bundled snapshot describes no image.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub runtime_files: BTreeMap<String, Vec<PathBuf>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -59,6 +66,17 @@ impl FabricCatalog {
                     )
                     .is_err()
             })
+            || catalog.runtime_files.iter().any(|(adapter_id, files)| {
+                !catalog
+                    .adapters
+                    .iter()
+                    .any(|adapter| adapter.adapter_id() == adapter_id)
+                    || files.iter().any(|file| {
+                        !file.to_str().is_some_and(|path| {
+                            path.starts_with('/') && !path.split('/').any(|part| part == "..")
+                        })
+                    })
+            })
         {
             return Err(<serde_json::Error as serde::de::Error>::custom(
                 "unsupported or inconsistent Fabric catalog metadata",
@@ -94,6 +112,30 @@ mod tests {
         assert!(FabricCatalog::from_json(&serde_json::to_string(&catalog).unwrap()).is_err());
         catalog.schema_version = 2;
         catalog.adapters[0].descriptor["contract_version"] = "substituted".into();
+        assert!(FabricCatalog::from_json(&serde_json::to_string(&catalog).unwrap()).is_err());
+    }
+
+    #[test]
+    fn runtime_files_must_name_a_cataloged_adapter_and_absolute_paths() {
+        let mut catalog = FabricCatalog::bundled();
+        let adapter_id = catalog.adapters[0].adapter_id().to_owned();
+        catalog
+            .runtime_files
+            .insert(adapter_id.clone(), vec!["/opt/runtime".into()]);
+        assert!(FabricCatalog::from_json(&serde_json::to_string(&catalog).unwrap()).is_ok());
+        catalog
+            .runtime_files
+            .insert(adapter_id, vec!["opt/runtime".into()]);
+        assert!(FabricCatalog::from_json(&serde_json::to_string(&catalog).unwrap()).is_err());
+        catalog.runtime_files.insert(
+            catalog.adapters[0].adapter_id().to_owned(),
+            vec!["/opt/runtime/../../etc".into()],
+        );
+        assert!(FabricCatalog::from_json(&serde_json::to_string(&catalog).unwrap()).is_err());
+        catalog.runtime_files.clear();
+        catalog
+            .runtime_files
+            .insert("org.fixture.absent".into(), vec!["/opt/runtime".into()]);
         assert!(FabricCatalog::from_json(&serde_json::to_string(&catalog).unwrap()).is_err());
     }
 }
