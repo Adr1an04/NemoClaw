@@ -221,6 +221,13 @@ fn operation(result: &OperationResult, context: &RenderContext) -> String {
     if let Some((heading, rest)) = output.split_once('\n') {
         output = format!("{}\n{rest}", context.output_palette.paint(heading, tone));
     }
+    if let Some(connection) = &result.connection {
+        output.push_str(&format!(
+            "\nOpenShell gateway: {}\nOpenShell workspace: {}\n",
+            terminal_text(&connection.gateway_endpoint),
+            terminal_text(&connection.workspace),
+        ));
+    }
     if !result.changes.is_empty() {
         output.push_str(if planned {
             "\nPlanned actions:\n"
@@ -605,6 +612,33 @@ mod tests {
             &RenderContext::new(&cli),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn connection_output_identifies_the_gateway_and_workspace_without_claiming_access() {
+        for (command, outcome) in [("plan", "planned"), ("apply", "succeeded")] {
+            let connection = json!({
+                "gatewayEndpoint": "https://gateway.example:443",
+                "workspace": "nc-1234567890abcdef"
+            });
+            let result = json!({"outcome": outcome, "changes": [], "connection": connection});
+            let text = render(&["nemoclaw", command, "deployment.yaml"], result.clone());
+            assert!(
+                text.contains("OpenShell gateway: https://gateway.example:443\n"),
+                "{text}"
+            );
+            assert!(
+                text.contains("OpenShell workspace: nc-1234567890abcdef\n"),
+                "{text}"
+            );
+            assert!(!text.contains("access verified"));
+            let machine: Value = serde_json::from_str(&render(
+                &["nemoclaw", command, "deployment.yaml", "-o", "json"],
+                result,
+            ))
+            .unwrap();
+            assert_eq!(machine["connection"], connection);
+        }
     }
 
     #[test]

@@ -284,6 +284,10 @@ mod live {
         let runtime = runtime_resources(document);
         OperationResult {
             outcome: Outcome::Planned,
+            connection: Some(nemoclaw_sdk::DeploymentConnection {
+                gateway_endpoint: document.spec.gateway.endpoint().into(),
+                workspace: document.workspace(),
+            }),
             changes: changes(
                 &runtime.iter().map(String::as_str).collect::<Vec<_>>(),
                 "create",
@@ -378,6 +382,7 @@ mod live {
             deployment.plan_destroy(cancel).await.unwrap(),
             OperationResult {
                 outcome: Outcome::Planned,
+                connection: None,
                 changes: removed.clone(),
                 deferred: vec![],
                 retained: retained.clone(),
@@ -389,6 +394,7 @@ mod live {
             deployment.destroy(cancel).await.unwrap(),
             OperationResult {
                 outcome: Outcome::Destroyed,
+                connection: None,
                 changes: removed,
                 deferred: vec![],
                 retained: retained.clone(),

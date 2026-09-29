@@ -115,6 +115,7 @@ The CLI preserves the [SDK result fields](../../crates/nemoclaw-sdk/src/deployme
 | `outcome` | `planned`, `succeeded`, or `destroyed` |
 | `complete` | Whether a planned result has no deferred work; inspect this alongside the exit code |
 | `changes` | Resource addresses and planned/applied action lists; an empty list does not mean apply skipped readiness checks |
+| `connection` | Plan/apply gateway endpoint and UID-derived workspace selectors; does not establish access or configure OpenShell CLI credentials |
 | `deferred` | Checks or changes deferred by planning; omitted when empty |
 | `discovery` | Plan query targets, typed observations, credential-reference availability, and resource inventory; see the [SDK report contract](../sdk.md#read-plan-discovery-and-resource-inventory); omitted when empty |
 | `health` | Apply observations for the hosted Fabric runtime; includes explicit unsupported results; omitted for other operations |
