@@ -55,20 +55,10 @@ impl Error {
     }
 }
 
-impl From<nemoclaw_runtime::config::ConfigError> for crate::config::ConfigError {
-    fn from(error: nemoclaw_runtime::config::ConfigError) -> Self {
-        Self(error.0)
-    }
-}
-impl From<nemoclaw_runtime::config::ConfigError> for Error {
-    fn from(error: nemoclaw_runtime::config::ConfigError) -> Self {
-        Self::Configuration(error.into())
-    }
-}
 impl From<nemoclaw_runtime::Error> for Error {
     fn from(error: nemoclaw_runtime::Error) -> Self {
         match error {
-            nemoclaw_runtime::Error::Configuration(e) => Self::Configuration(e.into()),
+            nemoclaw_runtime::Error::Configuration(e) => Self::Configuration(e),
             nemoclaw_runtime::Error::Hardware(e) => {
                 Self::Observation(crate::ObservationError::Hardware(e))
             }

@@ -49,7 +49,7 @@ impl Service {
         if let Some(placement) = self.published_placement()? {
             placement.validate(self.serving.port)?;
         }
-        self.runtime.validate().map_err(Into::into)
+        self.runtime.validate()
     }
 }
 

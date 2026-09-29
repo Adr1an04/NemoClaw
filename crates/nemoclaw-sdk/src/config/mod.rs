@@ -35,7 +35,7 @@ mod types;
 pub use inference::{InferenceConnection, InferenceTarget};
 pub(crate) mod validation;
 use sha2::{Digest, Sha256};
-use std::{fmt, io::Read};
+use std::io::Read;
 pub use types::*;
 pub use validation::{is_fabric_harness, valid_name, validate_endpoint};
 
@@ -45,19 +45,7 @@ pub use crate::artifact_pins::DEFAULT_AGENT_IMAGE;
 pub use crate::artifact_pins::DEFAULT_GATEWAY_IMAGE;
 
 /// Configuration diagnostics omit credentials and arbitrary source values.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ConfigError(pub String);
-impl ConfigError {
-    pub fn new(message: &'static str) -> Self {
-        Self(message.into())
-    }
-}
-impl fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-impl std::error::Error for ConfigError {}
+pub use nemoclaw_runtime::config::ConfigError;
 
 impl Document {
     /// Read, default, and validate a configuration document.
