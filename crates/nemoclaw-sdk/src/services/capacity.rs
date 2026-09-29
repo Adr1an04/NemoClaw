@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-use super::{ManagedOllama, installers};
+use super::installers;
 use crate::{Error, backend::Row, docker::Connections, hardware::Capacity, managed::Spec};
+use nemoclaw_runtime::ollama::ManagedOllama;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Total serving memory required by the selected services on one execution engine.
@@ -22,6 +23,7 @@ impl ServiceCapacity {
             self.required_bytes,
             self.observed_bytes,
         )
+        .map_err(Into::into)
     }
 }
 
@@ -201,7 +203,7 @@ fn account(services: &[(CapacityService, bool)], capacity: &Capacity) -> Result<
 
 enum CapacityService {
     Ollama(ManagedOllama),
-    Vllm(installers::vllm::Service),
+    Vllm(nemoclaw_runtime::vllm::Service),
 }
 
 /// Planning inspects existing model data; apply also resolves missing artifacts

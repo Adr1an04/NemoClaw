@@ -53,6 +53,7 @@ impl Backend for Fixture {
         nemoclaw_sdk::services::installers::vllm::hardware_capacity::check_memory(
             &service, &capacity, false,
         )
+        .map_err(Into::into)
     }
     async fn read(&self, _: &str, _: &Row, _: bool) -> Result<Option<Row>, ObservationError> {
         let mode = self.mode();

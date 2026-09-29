@@ -56,3 +56,46 @@ impl Error {
         }
     }
 }
+
+impl From<nemoclaw_runtime::config::ConfigError> for crate::config::ConfigError {
+    fn from(error: nemoclaw_runtime::config::ConfigError) -> Self {
+        Self(error.0)
+    }
+}
+impl From<nemoclaw_runtime::config::ConfigError> for Error {
+    fn from(error: nemoclaw_runtime::config::ConfigError) -> Self {
+        Self::Configuration(error.into())
+    }
+}
+impl From<nemoclaw_runtime::Error> for Error {
+    fn from(error: nemoclaw_runtime::Error) -> Self {
+        match error {
+            nemoclaw_runtime::Error::Configuration(e) => Self::Configuration(e.into()),
+            nemoclaw_runtime::Error::Hardware(e) => {
+                Self::Observation(crate::ObservationError::Hardware(e))
+            }
+            nemoclaw_runtime::Error::State(e) => Self::State(e),
+            nemoclaw_runtime::Error::Conflict(e) => Self::Conflict(e),
+            nemoclaw_runtime::Error::Protection(diagnostic) => Self::Execution {
+                operation: "memory protection".into(),
+                diagnostic,
+                postcondition_failures: None,
+            },
+            nemoclaw_runtime::Error::Cancelled => Self::Cancelled,
+            nemoclaw_runtime::Error::ServiceStarting => Self::ServiceStarting,
+            nemoclaw_runtime::Error::Observation(e) => Self::Observation(match e {
+                nemoclaw_runtime::ObservationError::Authentication => {
+                    crate::ObservationError::Authentication
+                }
+                nemoclaw_runtime::ObservationError::Permission => {
+                    crate::ObservationError::Permission
+                }
+                nemoclaw_runtime::ObservationError::Query => crate::ObservationError::Query,
+                nemoclaw_runtime::ObservationError::Incomplete => {
+                    crate::ObservationError::Incomplete
+                }
+                nemoclaw_runtime::ObservationError::Transport => crate::ObservationError::Transport,
+            }),
+        }
+    }
+}

@@ -111,7 +111,9 @@ impl Engine {
                         }
                     }
                 }
-                service.check_capacity(&capacity, phase.starting(), download, preparation)
+                service
+                    .check_capacity(&capacity, phase.starting(), download, preparation)
+                    .map_err(Into::into)
             };
             tokio::time::timeout(std::time::Duration::from_secs(150), work)
                 .await

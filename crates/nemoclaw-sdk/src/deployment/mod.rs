@@ -422,6 +422,7 @@ impl Deployment {
             format!("provider_installation {{\n filesystem_mirror {{ path = {quoted} }}\n}}\n")
                 .as_bytes(),
         )
+        .map_err(Into::into)
     }
     async fn tofu(
         &self,

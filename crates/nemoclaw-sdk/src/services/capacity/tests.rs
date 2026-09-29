@@ -44,7 +44,7 @@ fn capacity() -> Capacity {
         ..Default::default()
     }
 }
-fn vllm(service: &mut CapacityService) -> &mut installers::vllm::Service {
+fn vllm(service: &mut CapacityService) -> &mut nemoclaw_runtime::vllm::Service {
     match service {
         CapacityService::Vllm(service) => service,
         _ => panic!("expected vLLM"),
@@ -90,7 +90,7 @@ fn combined_accounting_includes_mixed_installers_and_dedicated_utilization() {
     else {
         panic!("expected Ollama")
     };
-    services[1].0 = CapacityService::Ollama(*service);
+    services[1].0 = CapacityService::Ollama(service.runtime);
     let observed = account(&services, &capacity()).unwrap();
     assert_eq!(observed.total.required_bytes, (20 + 16 + 32) * GIB);
     let mut services = parse(None, &specs()).unwrap();

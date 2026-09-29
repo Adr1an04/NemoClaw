@@ -85,7 +85,7 @@ impl Sandbox {
                                 .map(String::as_str),
                         )
                     })?;
-                Ok((None, name.as_str(), definition))
+                Ok::<_, ConfigError>((None, name.as_str(), definition))
             });
         let inline = agent
             .integrations

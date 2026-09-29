@@ -16,8 +16,6 @@ mod readiness;
 mod registry;
 pub(crate) use readiness::configure_proxy_readiness;
 pub use readiness::{validate_readiness_spec, wait_service_ready};
-#[cfg(target_os = "linux")]
-mod runtime;
 mod validation;
 pub use validation::validate_resource_spec;
 
@@ -36,15 +34,3 @@ pub(crate) use registry::{
     has_runtime, install_plans, provider_authenticated, remove_plans, required_storage_address,
     resolve, resource_label, validate, validate_provider, validate_route,
 };
-
-/// Run the package implementation encoded in `NEMOCLAW_RUNTIME_SPEC`.
-///
-/// The executable remains package-neutral; installer dispatch and behavior are
-/// owned entirely by this service component.
-#[cfg(target_os = "linux")]
-pub async fn run_runtime(
-    cancel: &crate::CancellationToken,
-    trip: &crate::CancellationToken,
-) -> Result<(), crate::Error> {
-    runtime::run(cancel, trip).await
-}
