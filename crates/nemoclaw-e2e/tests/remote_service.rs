@@ -347,6 +347,46 @@ async fn lifecycle(harness: &str, authenticated: bool, kind: &str, partial_destr
     fs::write(root.join("export.yaml"), exported).unwrap();
     run(root, &bundle, "apply", "export.yaml", true).await;
     assert_eq!(read(root, "engine.json"), stable);
+    let before_plan = fs::read(root.join("deployment/runtime/terraform.tfstate")).unwrap();
+    let shell_state = fs::read(root.join("deployment/terraform.tfstate")).unwrap();
+    let gateway_effects = gateway.state.lock().unwrap().effects;
+    // Readiness is an apply-time gate, even after a successful unchanged apply.
+    save(root, "control.json", &json!({"startup_failure":true}));
+    let preview: Value =
+        serde_json::from_slice(&run(root, &bundle, "plan", "export.yaml", true).await).unwrap();
+    assert_eq!(preview["complete"], true, "{preview}");
+    assert!(preview.get("deferred").is_none(), "{preview}");
+    assert_eq!(preview["changes"], json!([]));
+    assert!(
+        preview["unverified"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|message| message.as_str().unwrap().contains("readiness"))
+    );
+    assert!(
+        preview["discovery"]["observations"]
+            .as_object()
+            .unwrap()
+            .values()
+            .any(|observation| observation["kind"] == "service"
+                && observation["observation"]["ready"].is_null())
+    );
+    assert_eq!(read(root, "engine.json"), stable);
+    assert_eq!(gateway.state.lock().unwrap().effects, gateway_effects);
+    assert_eq!(
+        fs::read(root.join("deployment/runtime/terraform.tfstate")).unwrap(),
+        before_plan
+    );
+    assert_eq!(
+        fs::read(root.join("deployment/terraform.tfstate")).unwrap(),
+        shell_state
+    );
+    assert!(!root.join("capacity_reads").exists());
+    run(root, &bundle, "apply", "export.yaml", false).await;
+    assert_eq!(read(root, "engine.json"), stable);
+    save(root, "control.json", &json!({}));
+    run(root, &bundle, "apply", "export.yaml", true).await;
     let state = fs::read(root.join("deployment/runtime/terraform.tfstate")).unwrap();
     if harness == "nvidia.fabric.openclaw" && !authenticated {
         let original = read(root, "config.yaml");

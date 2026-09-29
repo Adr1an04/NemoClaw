@@ -392,6 +392,12 @@ fn operation(result: &OperationResult, context: &RenderContext) -> String {
             output.push_str(&format!("  {}\n", terminal_text(reason)));
         }
     }
+    if !result.unverified.is_empty() {
+        output.push_str("\nUnverified checks:\n");
+        for reason in &result.unverified {
+            output.push_str(&format!("  {}\n", terminal_text(reason)));
+        }
+    }
     for health in &result.health {
         let runtime = &health.health;
         let status = context.output_palette.paint("unsupported", Tone::Warning);
@@ -657,6 +663,35 @@ mod tests {
             json["discovery"]["observations"]["endpoint_0"]["observation"]["api_verified"],
             false
         );
+    }
+
+    #[test]
+    fn unverified_checks_remain_visible_without_making_a_resource_plan_incomplete() {
+        let result = json!({"outcome":"planned","changes":[],"unverified":["Service readiness is checked during apply.","Catalog unavailable\u{1b}[2J"]});
+        let text = render(&["nemoclaw", "plan", "model.yaml"], result.clone());
+        assert!(text.contains("No resource changes planned."), "{text}");
+        assert!(text.contains("Unverified checks:"), "{text}");
+        assert!(text.contains("Service readiness is checked during apply."));
+        assert!(!text.contains("Plan incomplete"));
+        assert!(!text.contains('\u{1b}'));
+        let output: Value = serde_json::from_str(&render(
+            &["nemoclaw", "plan", "model.yaml", "-o", "json"],
+            result.clone(),
+        ))
+        .unwrap();
+        assert_eq!(output["complete"], true);
+        assert_eq!(output["unverified"], result["unverified"]);
+        let mut blocked = result;
+        blocked["deferred"] = json!(["Gateway inventory unavailable"]);
+        let text = render(&["nemoclaw", "plan", "model.yaml"], blocked.clone());
+        assert!(text.contains("Plan incomplete"));
+        assert!(text.contains("Unverified checks:"));
+        let output: Value = serde_json::from_str(&render(
+            &["nemoclaw", "plan", "model.yaml", "-o", "json"],
+            blocked,
+        ))
+        .unwrap();
+        assert_eq!(output["complete"], false);
     }
 
     #[test]

@@ -92,6 +92,9 @@ pub struct OperationResult {
     pub connection: Option<DeploymentConnection>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub deferred: Vec<String>,
+    /// Supplemental checks that do not make a resource plan incomplete.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unverified: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub retained: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -106,6 +109,7 @@ impl OperationResult {
             changes,
             connection: None,
             deferred: Vec::new(),
+            unverified: Vec::new(),
             retained: Vec::new(),
             health: Vec::new(),
             discovery: DiscoveryReport::default(),
@@ -237,6 +241,9 @@ impl Deployment {
                 crate::inference_discovery::observe_credentials(&document, self.secrets.as_ref())?;
             append_credential_deferrals(&mut result.deferred, &discovery.credentials);
             discovery.gateway_target(&document);
+            result.unverified = discovery.unverified();
+            result.unverified.sort();
+            result.unverified.dedup();
             result.discovery = discovery;
             result
                 .deferred
@@ -301,6 +308,9 @@ impl Deployment {
             };
             append_credential_deferrals(&mut result.deferred, &discovery.credentials);
             discovery.gateway_target(&document);
+            result.unverified = discovery.unverified();
+            result.unverified.sort();
+            result.unverified.dedup();
             result.discovery = discovery;
             result.deferred.sort();
             result.deferred.dedup();

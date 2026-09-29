@@ -73,12 +73,31 @@ impl DiscoveryReport {
             && self.credentials.is_empty()
             && self.resources.is_empty()
     }
-    /// Unresolved facts after merging the latest observation for each query.
+    /// Unresolved prerequisites that prevent a complete resource plan.
     pub fn deferred(&self) -> Vec<String> {
+        self.unresolved(false)
+    }
+    /// Supplemental catalog or apply-time readiness facts, not planning gates.
+    pub fn unverified(&self) -> Vec<String> {
+        self.unresolved(true)
+    }
+    fn unresolved(&self, advisory: bool) -> Vec<String> {
         self.observations
             .iter()
             .filter_map(|(name, observation)| {
                 use crate::discovery::ObservationStatus::Available;
+                let supplemental = match observation {
+                    DiscoveryObservation::Inference(_) | DiscoveryObservation::Service { .. } => {
+                        true
+                    }
+                    DiscoveryObservation::Unresolved { category } => {
+                        matches!(category.as_str(), "inference" | "service")
+                    }
+                    _ => false,
+                };
+                if supplemental != advisory {
+                    return None;
+                }
                 let resolved = match observation {
                     DiscoveryObservation::Engine(value) => value.status == Available,
                     DiscoveryObservation::Hardware(value) => value.status == Available,
@@ -159,7 +178,7 @@ pub(super) fn unverified_message(name: &str) -> String {
         "gateway"=>"Gateway version and compute-driver compatibility remain unverified until its provider observation completes.",
         "hardware"=>"Target hardware inventory remains unverified; requirements are still checked by the owning runtime.",
         "inference"=>"Inference endpoint catalog remains unverified from the control host; sandbox connectivity and generation APIs require their own checks.",
-        "service"=>"Managed inference readiness remains unverified until the existing service observation completes.",
+        "service"=>"Managed inference readiness is checked during apply; plan does not establish current service readiness.",
         _=>"Selected image Fabric capabilities are unverified; image metadata or compatibility is incomplete. Runtime adapter checks remain required.",
     }.into()
 }
@@ -303,6 +322,39 @@ impl Plan {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn catalog_and_apply_time_readiness_do_not_defer_resource_planning() {
+        let mut report: DiscoveryReport = serde_json::from_value(json!({"observations":{
+            "endpoint_0":{"kind":"inference","observation":{"status":"unknown","reason":"catalog unsupported","source":"control_host_http_models","reachable":true,"authentication":"unknown","models":[],"api_verified":false}},
+            "endpoint_1":{"kind":"unresolved","observation":{"category":"inference"}},
+            "service_model":{"kind":"service","observation":{"ready":null,"source":"service_readiness"}},
+            "service_stopped":{"kind":"service","observation":{"ready":false,"source":"service_readiness"}}
+        }})).unwrap();
+        assert!(report.deferred().is_empty(), "{:?}", report.deferred());
+        assert_eq!(report.unverified().len(), 4);
+        report.observations.insert(
+            "gateway".into(),
+            DiscoveryObservation::Unresolved {
+                category: "gateway".into(),
+            },
+        );
+        assert_eq!(report.deferred().len(), 1);
+        assert!(report.deferred()[0].contains("Gateway"));
+        let encoded = serde_json::to_value(&report).unwrap();
+        assert_eq!(
+            encoded["observations"]["service_model"]["observation"]["ready"],
+            Value::Null
+        );
+        assert_eq!(
+            encoded["observations"]["service_stopped"]["observation"]["ready"],
+            false
+        );
+        assert_eq!(
+            encoded["observations"]["endpoint_0"]["observation"]["status"],
+            "unknown"
+        );
+    }
+
     #[test]
     fn query_provenance_copies_only_safe_inputs_not_provider_payloads() {
         let plan:Plan=serde_json::from_value(json!({"planned_values":{"root_module":{"resources":[{"address":"data.nemoclaw_inference_capabilities.endpoint_0","values":{"endpoint":"https://example.com/v1","api":"openai-completions","credential_env":"API_KEY","credential":"PRIVATE_SENTINEL","spec":"PRIVATE_SENTINEL","observation_json":null}}]}}})).unwrap();

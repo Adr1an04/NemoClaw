@@ -63,7 +63,13 @@ async fn cli_terminal_outputs_preserve_lifecycle_and_json_contract() {
     let effects = fixture.state.lock().unwrap().effects;
     let planned = invoke("plan", "json");
     let result: serde_json::Value = serde_json::from_slice(&planned.stdout).unwrap();
-    assert_eq!(result["complete"], false);
+    assert_eq!(result["complete"], true);
+    assert!(result.get("deferred").is_none());
+    assert!(!result["unverified"].as_array().unwrap().is_empty());
+    let planned = invoke("plan", "text");
+    let preview = String::from_utf8(planned.stdout).unwrap();
+    assert!(preview.contains("No resource changes planned."));
+    assert!(preview.contains("Unverified checks:"));
     assert!(
         !result["discovery"]["targets"]
             .as_object()

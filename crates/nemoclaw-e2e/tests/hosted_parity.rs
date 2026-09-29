@@ -292,6 +292,7 @@ mod live {
                 "create",
             ),
             deferred: vec!["OpenShell registration and sandbox require the managed gateway".into()],
+            unverified: vec![],
             retained: vec![],
             health: vec![],
             discovery: Default::default(),
@@ -343,6 +344,7 @@ mod live {
                 .any(|message| message == &expected.deferred[0])
         );
         expected.deferred = plan.deferred.clone();
+        expected.unverified = plan.unverified.clone();
         assert_eq!(plan, expected);
         let applied = deployment.apply(document, cancel).await.unwrap();
         assert_eq!(applied.outcome, Outcome::Succeeded);
@@ -384,6 +386,7 @@ mod live {
                 connection: None,
                 changes: removed.clone(),
                 deferred: vec![],
+                unverified: vec![],
                 retained: retained.clone(),
                 health: vec![],
                 discovery: Default::default(),
@@ -396,6 +399,7 @@ mod live {
                 connection: None,
                 changes: removed,
                 deferred: vec![],
+                unverified: vec![],
                 retained: retained.clone(),
                 health: vec![],
                 discovery: Default::default(),
