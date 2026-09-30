@@ -269,7 +269,8 @@ fn invalid_answer_stays_focused_and_explains_the_authoring_rule() {
 
     assert_eq!(wizard.step(), Step::DeploymentName);
     assert!(
-        wizard.error().unwrap().contains("Metadata/properties/name"),
+        wizard.error().unwrap().contains("metadata.name")
+            && wizard.error().unwrap().contains("required pattern"),
         "{:?}",
         wizard.error()
     );
