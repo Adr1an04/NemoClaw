@@ -11,10 +11,12 @@ import json
 from pathlib import Path
 
 from nemo_fabric import DiscoveryConfig, Fabric
+from runtime_metadata import read_runtime
 
 # Harness image stages write the directories their layout places each adapter's
 # runtime in, so deployment planning can check explicit filesystem grants.
 RUNTIME_FILES = Path("/opt/nemoclaw/runtime-files.json")
+RUNTIME_MANIFEST = Path("/opt/nemoclaw/runtime.json")
 
 
 def read_runtime_files(path, adapters):
@@ -39,7 +41,13 @@ def read_runtime_files(path, adapters):
 
 
 def snapshot(
-    revision, source_sha256, *, discovery=None, installed_only=False, runtime_files=RUNTIME_FILES
+    revision,
+    source_sha256,
+    *,
+    discovery=None,
+    installed_only=False,
+    runtime_files=RUNTIME_FILES,
+    runtime_manifest=RUNTIME_MANIFEST,
 ):
     fabric = Fabric()
     records = {
@@ -64,6 +72,9 @@ def snapshot(
     files = read_runtime_files(runtime_files, catalog["adapters"])
     if files:
         catalog["runtime_files"] = files
+    runtime = read_runtime(runtime_manifest, catalog["adapters"], required=installed_only)
+    if runtime is not None:
+        catalog["runtime"] = runtime
     return catalog
 
 
@@ -73,6 +84,7 @@ def main():
     parser.add_argument("--source-sha256")
     parser.add_argument("--provenance", type=Path)
     parser.add_argument("--installed", action="store_true")
+    parser.add_argument("--runtime-manifest", type=Path, default=RUNTIME_MANIFEST)
     parser.add_argument("--descriptor", action="append", type=Path, default=[])
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
@@ -92,6 +104,7 @@ def main():
                 args.source_sha256,
                 discovery=discovery,
                 installed_only=args.installed,
+                runtime_manifest=args.runtime_manifest,
             ),
             indent=2,
             sort_keys=True,

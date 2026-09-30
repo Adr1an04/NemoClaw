@@ -24,6 +24,9 @@ pub struct FabricCatalog {
     /// descriptors unedited; the bundled snapshot describes no image.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub runtime_files: BTreeMap<String, Vec<PathBuf>>,
+    /// Present only for an installed image, never inferred from the bundled descriptors.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime: Option<Box<crate::image_runtime::ImageRuntime>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,6 +69,10 @@ impl FabricCatalog {
                     )
                     .is_err()
             })
+            || catalog
+                .runtime
+                .as_ref()
+                .is_some_and(|runtime| !runtime.valid(&catalog.adapters))
             || catalog.runtime_files.iter().any(|(adapter_id, files)| {
                 !catalog
                     .adapters
@@ -101,6 +108,52 @@ mod tests {
                     .provenance
                     .as_array()
                     .is_some_and(|items| !items.is_empty())
+            );
+        }
+    }
+
+    #[test]
+    fn image_runtime_layout_survives_discovery_without_sdk_path_defaults() {
+        let mut encoded = serde_json::to_value(FabricCatalog::bundled()).unwrap();
+        let binaries: BTreeMap<_, _> = encoded["adapters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|record| {
+                (
+                    record["descriptor"]["adapter_id"]
+                        .as_str()
+                        .unwrap()
+                        .to_owned(),
+                    vec!["/srv/python3.99", "/srv/bun"],
+                )
+            })
+            .collect();
+        let runtime = serde_json::json!({
+            "schema_version": 1,
+            "command": ["/srv/python3.99", "/srv/bridge.py"],
+            "environment": {"ADAPTER_PYTHON":"/srv/python3.99", "PATH":"/srv"},
+            "required_paths": ["/srv"],
+            "policy": {"version":1,"filesystem_policy":{"read_only":["/srv"],"read_write":["/data"]},"process":{"run_as_user":"1234","run_as_group":"1234"},"network_policies":{}},
+            "binaries": binaries,
+        });
+        encoded["runtime"] = runtime.clone();
+        let decoded = FabricCatalog::from_json(&encoded.to_string()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap()["runtime"], runtime);
+        for (pointer, invalid) in [
+            ("/runtime/schema_version", serde_json::json!(9)),
+            ("/runtime/command/0", serde_json::json!("python")),
+            (
+                "/runtime/required_paths/0",
+                serde_json::json!("/srv/../etc"),
+            ),
+            ("/runtime/binaries", serde_json::json!({})),
+        ] {
+            let mut bad = encoded.clone();
+            *bad.pointer_mut(pointer).unwrap() = invalid;
+            assert!(
+                FabricCatalog::from_json(&bad.to_string()).is_err(),
+                "accepted {pointer}"
             );
         }
     }

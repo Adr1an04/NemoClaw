@@ -20,6 +20,7 @@ fn catalog() -> FabricCatalog {
             "config":{"accepts":["models"]}}),
         }],
         runtime_files: Default::default(),
+        runtime: None,
     }
 }
 fn config() -> serde_json::Value {
