@@ -44,23 +44,25 @@ pub(crate) fn populate(
             )),
         );
     }
-    let Some(gateway) = document.spec.gateway.as_managed() else {
-        graph["output"]["discovery"] = json!({"value":observations});
-        return Ok(());
-    };
-    let engine = literal(&gateway.engine);
-    graph["data"]["nemoclaw_engine_capabilities"]["current"] = json!({
-        "engine": engine,
-        "compute_driver": document.spec.sandboxes[0].runtime.provider,
-        "lifecycle": { "postcondition": [{
-            "condition": "${self.status != \"unavailable\"}",
-            "error_message": "The selected engine does not meet gateway prerequisites. Correct the runtime or target configuration."
-        }] }
+    let engine = literal(match &document.spec.gateway {
+        crate::config::Gateway::Managed(gateway) => &gateway.engine,
+        crate::config::Gateway::External(gateway) => &gateway.engine,
     });
-    observations.insert(
-        "engine".into(),
-        json!("${data.nemoclaw_engine_capabilities.current.observation_json}"),
-    );
+    let managed = document.spec.gateway.as_managed().is_some();
+    if managed {
+        graph["data"]["nemoclaw_engine_capabilities"]["current"] = json!({
+            "engine": engine,
+            "compute_driver": document.spec.sandboxes[0].runtime.provider,
+            "lifecycle": { "postcondition": [{
+                "condition": "${self.status != \"unavailable\"}",
+                "error_message": "The selected engine does not meet gateway prerequisites. Correct the runtime or target configuration."
+            }] }
+        });
+        observations.insert(
+            "engine".into(),
+            json!("${data.nemoclaw_engine_capabilities.current.observation_json}"),
+        );
+    }
     let mut sandboxes: Vec<_> = document.spec.sandboxes.iter().collect();
     sandboxes.sort_by(|left, right| left.name.cmp(&right.name));
     for (index, sandbox) in sandboxes.into_iter().enumerate() {
@@ -84,13 +86,22 @@ pub(crate) fn populate(
             "engine": engine,
             "image": literal(&sandbox.image.ref_),
             "requirements_json": literal(&serde_json::to_string(&requirements).expect("Fabric requirements")),
-            "architecture": "${jsondecode(data.nemoclaw_engine_capabilities.current.observation_json).architecture}",
-            "operating_system": "${jsondecode(data.nemoclaw_engine_capabilities.current.observation_json).operating_system}",
             "lifecycle": { "postcondition": [{
                 "condition": "${self.compatibility_status != \"unsupported\"}",
                 "error_message": rejection
+            }, {
+                "condition": "${self.runtime_json != \"\"}",
+                "error_message": format!("sandbox/{}: image runtime metadata is unavailable. Set spec.gateway.engine to the sandbox image engine, load an image built with its runtime manifest, and use its immutable digest. Resources retained.", sandbox.name)
             }] }
         });
+        if managed {
+            graph["data"]["nemoclaw_fabric_capabilities"][&name]["architecture"] = json!(
+                "${jsondecode(data.nemoclaw_engine_capabilities.current.observation_json).architecture}"
+            );
+            graph["data"]["nemoclaw_fabric_capabilities"][&name]["operating_system"] = json!(
+                "${jsondecode(data.nemoclaw_engine_capabilities.current.observation_json).operating_system}"
+            );
+        }
         observations.insert(
             name.clone(),
             json!(format!(

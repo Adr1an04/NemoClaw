@@ -37,6 +37,27 @@ class HealthCommand(unittest.TestCase):
 
 
 class RuntimeLifecycle(unittest.IsolatedAsyncioTestCase):
+    async def test_status_command_returns_applied_configuration_without_invoking(self):
+        snapshot = {"ready": False, "runtime_id": None, "config": None}
+        requests = []
+        with tempfile.TemporaryDirectory() as directory:
+            socket = str(Path(directory) / "fabric.sock")
+
+            async def respond(reader, writer):
+                requests.append(json.loads(await reader.readline()))
+                writer.write(json.dumps(snapshot).encode() + b"\n")
+                await writer.drain()
+                writer.close()
+                await writer.wait_closed()
+
+            output = io.StringIO()
+            async with await asyncio.start_unix_server(respond, socket):
+                with patch("fabric.SOCKET", socket), redirect_stdout(output):
+                    status = await client("status", None)
+            self.assertEqual(status, 0)
+            self.assertEqual(json.loads(output.getvalue()), snapshot)
+            self.assertEqual(requests, [{"operation": "status"}])
+
     async def test_configuration_is_reconstructible_and_unchanged_apply_does_not_restart(self):
         config = {
             "metadata": {"name": "main"},

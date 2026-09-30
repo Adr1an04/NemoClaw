@@ -509,7 +509,10 @@ fn create_sandbox(
         return Err(Status::already_exists("collision"));
     }
     let sandbox = p::Sandbox {
-        metadata: Some(state.metadata(q.name, workspace(&q.workspace_scope)?, q.labels)),
+        metadata: Some(p::ObjectMeta {
+            annotations: q.annotations,
+            ..state.metadata(q.name, workspace(&q.workspace_scope)?, q.labels)
+        }),
         spec: q.spec,
         status: Some(p::SandboxStatus {
             phase: state.sandbox_phase.unwrap_or(p::SandboxPhase::Ready) as i32,
@@ -619,6 +622,8 @@ impl tonic::server::ServerStreamingService<p::ExecSandboxRequest> for Exec {
             return std::future::ready(Err(Status::not_found("absent")));
         };
         let sandbox_id = sandbox.metadata.as_ref().unwrap().id.clone();
+        let operation_index = sandbox.spec.as_ref().unwrap().command.len() - 1;
+
         if state.exec_stalled {
             return std::future::ready(Ok(Response::new(Box::pin(tokio_stream::pending()))));
         }
@@ -661,10 +666,15 @@ impl tonic::server::ServerStreamingService<p::ExecSandboxRequest> for Exec {
                 )),
             }));
         }
-        if request.command.get(2).is_some_and(|c| c == "configure") && state.exec_exit == 0 {
+        if request
+            .command
+            .get(operation_index)
+            .is_some_and(|c| c == "configure")
+            && state.exec_exit == 0
+        {
             state.fabric_configurations.insert(
                 sandbox_id.clone(),
-                serde_json::from_str(&request.command[4]).unwrap(),
+                serde_json::from_str(&request.command[operation_index + 2]).unwrap(),
             );
             state.fabric_stopped = state.configuration_error.is_some();
             if let Some(error) = &state.configuration_error {
@@ -679,8 +689,8 @@ impl tonic::server::ServerStreamingService<p::ExecSandboxRequest> for Exec {
         }
         if request
             .command
-            .get(2)
-            .is_some_and(|c| c.contains("Read the existing Fabric host status"))
+            .get(operation_index)
+            .is_some_and(|c| c == "status")
         {
             let model = state.fabric_configurations.get(&sandbox_id);
             let config = model.cloned();
@@ -695,7 +705,7 @@ impl tonic::server::ServerStreamingService<p::ExecSandboxRequest> for Exec {
         }
         let exit = if request
             .command
-            .get(2)
+            .get(operation_index)
             .is_some_and(|command| command == "configure")
             && state.configuration_error.is_some()
         {

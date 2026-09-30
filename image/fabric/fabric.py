@@ -213,7 +213,7 @@ async def client(operation, name, config=None, input=None):
                 else 2
             )
         print(json.dumps(result))
-        return 0 if result.get("status") == "succeeded" else 1
+        return 0 if operation == "status" or result.get("status") == "succeeded" else 1
     finally:
         writer.close()
         await writer.wait_closed()
@@ -222,6 +222,8 @@ async def client(operation, name, config=None, input=None):
 if __name__ == "__main__":
     if sys.argv[1:] == ["serve"]:
         asyncio.run(serve())
+    elif sys.argv[1:] == ["status"]:
+        sys.exit(asyncio.run(client("status", None)))
     elif len(sys.argv) in (2, 3) and sys.argv[1] == "health":
         # The pinned Fabric SDK has no runtime health API.
         print(
@@ -237,5 +239,5 @@ if __name__ == "__main__":
         sys.exit(asyncio.run(client("invoke", sys.argv[2], input=json.loads(sys.argv[3]))))
     else:
         raise SystemExit(
-            "usage: fabric.py serve | health [NAME] | {prepare,configure,check} NAME CONFIG_JSON | invoke NAME INPUT_JSON | probe NAME"
+            "usage: fabric.py serve | status | health [NAME] | {prepare,configure,check} NAME CONFIG_JSON | invoke NAME INPUT_JSON | probe NAME"
         )

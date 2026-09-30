@@ -38,7 +38,7 @@ pub struct ResourceSource {
 impl OperationResult {
     pub(super) fn describe_sources(&mut self, document: &Document) -> Result<(), Error> {
         for provider in document.selected_providers()? {
-            if provider.key.starts_with("local-") && provider.key != provider.definition.name {
+            if provider.key != provider.definition.name {
                 for kind in ["provider", "provider_profile"] {
                     self.resource_sources.insert(
                         format!("nemoclaw_{kind}.inference_{}", provider.key),

@@ -173,6 +173,7 @@ impl Deployment {
             .export_observations(&bundle, &store, &record, false, cancel)
             .await?;
         let mut document = record.document;
+        consistent_provider_credentials(&document, &record.generations, &observations)?;
         for target in compile::targets(&document, &record.generations)? {
             if cancel.is_cancelled() {
                 return Err(Error::Cancelled);
@@ -238,6 +239,39 @@ fn validate_projection(target: &Target, observed: &Value) -> Result<(), Error> {
                     "resource configuration drift requires inspection",
                 ));
             }
+        }
+    }
+    Ok(())
+}
+
+fn consistent_provider_credentials(
+    document: &Document,
+    generations: &compile::Generations,
+    observations: &BTreeMap<String, Value>,
+) -> Result<(), Error> {
+    let selected = document.selected_providers()?;
+    let mut credentials = BTreeMap::new();
+    for target in compile::targets(document, generations)?
+        .into_iter()
+        .filter(|target| target.kind == "provider")
+    {
+        let Some(provider) = selected
+            .iter()
+            .find(|provider| provider.key == target.values["name"])
+        else {
+            continue;
+        };
+        let reference = observations
+            .get(&target.address)
+            .and_then(|row| row["credential_env"].as_str())
+            .ok_or(Error::State("incomplete provider credential observation"))?;
+        if credentials
+            .insert(provider.path.clone(), reference)
+            .is_some_and(|previous| previous != reference)
+        {
+            return Err(Error::Conflict(
+                "registrations for one inference definition disagree on the credential reference; no YAML exported",
+            ));
         }
     }
     Ok(())
@@ -329,6 +363,30 @@ fn export_sandbox(expected: &Row, observed: &Row) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn export_requires_shared_definition_registrations_to_agree_on_credentials() {
+        let mut document =
+            Document::parse(include_bytes!("../../tests/fixtures/config/local.yaml").as_slice())
+                .unwrap();
+        let mut second = document.spec.sandboxes[0].clone();
+        second.name = "second".into();
+        second.image.ref_ = format!("fixture/second@sha256:{}", "b".repeat(64));
+        document.spec.sandboxes.push(second);
+        let generations = ["workspace", "provider", "sandbox"]
+            .map(|kind| (kind.into(), "a".repeat(32)))
+            .into();
+        let mut observations: BTreeMap<String, Value> = compile::targets(&document, &generations)
+            .unwrap()
+            .into_iter()
+            .filter(|target| target.kind == "provider")
+            .map(|target| (target.address, json!({"credential_env":"SAME_KEY"})))
+            .collect();
+        assert_eq!(observations.len(), 2);
+        consistent_provider_credentials(&document, &generations, &observations).unwrap();
+        observations.values_mut().next().unwrap()["credential_env"] = json!("OTHER_KEY");
+        assert!(consistent_provider_credentials(&document, &generations, &observations).is_err());
+    }
 
     #[test]
     fn export_rejects_configuration_and_intent_identity_drift_from_provider_observations() {
@@ -589,7 +647,10 @@ mod tests {
         let expected = compile::targets(&document, &record.generations)
             .unwrap()
             .into_iter()
-            .find(|target| target.kind == "provider" && target.values["name"] == "hosted")
+            .find(|target| {
+                target.kind == "provider"
+                    && target.values["endpoint"] == "https://hosted.example/v1"
+            })
             .unwrap()
             .values;
         let mut observed = expected.clone();

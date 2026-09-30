@@ -215,7 +215,11 @@ impl OpenShell {
         }
         Ok((exit.ok_or(ObservationError::Incomplete)?, output))
     }
-    fn configuration_command(&self, binding: &Row) -> Result<(Vec<String>, Row), Error> {
+    fn configuration_command(
+        &self,
+        binding: &Row,
+        operation: &str,
+    ) -> Result<(Vec<String>, Row), Error> {
         if value(binding, "agent_runtime") != "fabric" {
             return Err(Error::Conflict("unsupported sandbox runtime"));
         }
@@ -223,7 +227,7 @@ impl OpenShell {
         serde_json::from_str::<nemo_fabric_core::FabricConfig>(config)
             .map_err(|_| ObservationError::Query)?;
         Ok((
-            agent::fabric_command(&["check", value(binding, "agent_name"), config]),
+            agent::binding(binding)?.command(operation, &[value(binding, "agent_name"), config]),
             Row::new(),
         ))
     }
@@ -244,8 +248,8 @@ impl OpenShell {
         })
         .await
         .map_err(|_| Error::Conflict("Fabric sandbox startup timed out; resources retained"))??;
-        let (mut command, environment) = self.configuration_command(binding)?;
-        command[2] = if prepare { "prepare" } else { "configure" }.into();
+        let (command, environment) =
+            self.configuration_command(binding, if prepare { "prepare" } else { "configure" })?;
         let (exit, output) = self.exec_bound(binding, command, environment, 120).await?;
         if exit != 0 {
             return Err(configuration_failure(&output).into());
@@ -253,7 +257,7 @@ impl OpenShell {
         Ok(())
     }
     pub async fn configuration(&self, binding: &Row) -> Result<(), Error> {
-        let (command, environment) = self.configuration_command(binding)?;
+        let (command, environment) = self.configuration_command(binding, "check")?;
         let (exit, _) = self.exec_bound(binding, command, environment, 20).await?;
         if exit != 0 {
             return Err(Error::Conflict(
@@ -269,7 +273,7 @@ impl OpenShell {
                 let phase =
                     configuration_phase(sandbox.status.ok_or(ObservationError::Incomplete)?)?;
                 if phase == proto::SandboxPhase::Ready as i32 {
-                    let (command, environment) = self.configuration_command(binding)?;
+                    let (command, environment) = self.configuration_command(binding, "check")?;
                     if let Ok((0, _)) = self.exec_bound(binding, command, environment, 20).await {
                         return Ok(());
                     }
@@ -290,7 +294,7 @@ impl OpenShell {
         binding: &Row,
         agent: Option<&str>,
     ) -> Result<nemoclaw_sdk::RuntimeHealth, Error> {
-        let mut command = agent::fabric_command(&["health"]);
+        let mut command = agent::binding(binding)?.command("health", &[]);
         command.extend(agent.map(String::from));
         let (exit, output) = self.exec_bound(binding, command, Row::new(), 10).await?;
         if exit != 0 {

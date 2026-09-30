@@ -3,7 +3,7 @@
 
 use nemoclaw_e2e::openshell::Fixture;
 use nemoclaw_provider::openshell::OpenShell;
-use nemoclaw_sdk::{backend::Backend, compile, config::Document};
+use nemoclaw_sdk::{backend::Backend, config::Document};
 use std::{collections::BTreeMap, sync::Arc};
 
 #[tokio::test]
@@ -23,7 +23,7 @@ async fn health_accepts_only_the_pinned_bridge_contract_without_generation() {
         .into_iter()
         .map(|k| (k.into(), format!("{k}-generation")))
         .collect::<BTreeMap<_, _>>();
-    let targets = compile::targets(&doc, &generations).unwrap();
+    let targets = nemoclaw_e2e::image_runtime::targets(&doc, &generations).unwrap();
     for target in targets.iter().filter(|target| {
         matches!(
             target.kind.as_str(),

@@ -94,6 +94,7 @@ impl ResourceAdapter {
                 field,
                 "image_pull_policy"
                     | "credential_source"
+                    | "profile_name"
                     | "credential_env"
                     | "agent_runtime"
                     | "provider_type"

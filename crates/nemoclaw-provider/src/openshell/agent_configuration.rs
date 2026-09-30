@@ -65,11 +65,7 @@ impl OpenShell {
         let (exit, output) = self
             .exec_bound(
                 &parent,
-                vec![
-                    "/opt/fabric/bin/python".into(),
-                    "-c".into(),
-                    include_str!("agent_status.py").into(),
-                ],
+                agent::binding(&parent)?.command("status", &[]),
                 Row::new(),
                 20,
             )
