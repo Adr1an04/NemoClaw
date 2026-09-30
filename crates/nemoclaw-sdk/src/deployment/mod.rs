@@ -35,6 +35,9 @@ pub use timing::StepOutcome;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Progress {
+    /// A mutating OpenTofu subprocess has launched. Emitted synchronously once
+    /// per launch, before child output; this does not prove any change completed.
+    MutationStarted,
     Download(crate::DownloadProgress),
     /// A resource operation observed in OpenTofu's machine-readable UI.
     Resource {

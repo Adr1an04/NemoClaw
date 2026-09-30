@@ -10,12 +10,17 @@ use nemoclaw_sdk::{Error, OperationResult, Outcome};
 use std::{
     io::IsTerminal,
     path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
-/// Presentation context only: operation facts remain owned by the SDK.
+/// Presentation context and mutation facts reported by the SDK.
 pub(crate) struct RenderContext {
     operation: &'static str,
+    mutation_started: Arc<AtomicBool>,
     state_dir: PathBuf,
     input: Option<PathBuf>,
     verbose: bool,
@@ -36,6 +41,7 @@ impl RenderContext {
         };
         Self {
             operation,
+            mutation_started: Arc::new(AtomicBool::new(false)),
             input,
             state_dir: cli.state_dir.clone(),
             verbose: cli.verbose,
@@ -49,6 +55,21 @@ impl RenderContext {
                     && !matches!(cli.progress, crate::args::ProgressMode::Plain),
             ),
         }
+    }
+
+    pub(crate) fn progress(
+        &self,
+        display: Arc<dyn Fn(nemoclaw_sdk::Progress) + Send + Sync>,
+    ) -> Arc<dyn Fn(nemoclaw_sdk::Progress) + Send + Sync> {
+        let mutation_started = self.mutation_started.clone();
+        Arc::new(move |event| {
+            // Record synchronously even when progress rendering is disabled or
+            // its display channel is closed. Later stages never reset this fact.
+            if event == nemoclaw_sdk::Progress::MutationStarted {
+                mutation_started.store(true, Ordering::Relaxed);
+            }
+            display(event);
+        })
     }
 
     pub(crate) fn header(&self) -> String {
@@ -481,11 +502,12 @@ pub(crate) fn render_error(
     if let Some(input) = &context.input {
         details["input"] = serde_json::json!(input);
     }
-    let preflight_error = error_in_chain::<nemoclaw_sdk::config::ConfigError>(error).is_some()
-        || error_in_chain::<crate::credentials::FulfillmentError>(error).is_some();
     let remaining = match sdk {
-        Some(Error::SandboxChangeRefused { .. }) => "No runtime resources changed.",
-        _ if preflight_error => "No runtime resources changed.",
+        _ if !context.mutation_started.load(Ordering::Relaxed)
+            && matches!(context.operation, "Apply" | "Destroy") =>
+        {
+            "No runtime resources changed."
+        }
         Some(Error::SandboxStartup { .. }) => "Resources retained; sandbox startup failed.",
         _ if matches!(context.operation, "Apply" | "Destroy") => {
             "Resource state is not confirmed. Changes may already have been made; preserve the deployment state directory."
@@ -797,6 +819,7 @@ mod tests {
     fn failures_share_honest_state_and_interruption_does_not_suggest_apply() {
         let cli = Cli::try_parse_from(["nemoclaw", "destroy"]).unwrap();
         let context = RenderContext::new(&cli);
+        context.progress(Arc::new(|_| {}))(nemoclaw_sdk::Progress::MutationStarted);
         let text = render_error(&Error::Cancelled, OutputFormat::Text, &context);
         assert!(text.contains("Destroy interrupted"));
         assert!(text.contains("Changes may already have been made"));
@@ -819,6 +842,7 @@ mod tests {
     fn rejected_health_uses_ordinary_failure_output_and_preserves_state_warning() {
         let cli = Cli::try_parse_from(["nemoclaw", "apply", "spark.yaml"]).unwrap();
         let context = RenderContext::new(&cli);
+        context.progress(Arc::new(|_| {}))(nemoclaw_sdk::Progress::MutationStarted);
         let error = Error::Conflict("invalid Fabric health response; resources retained");
         let text = render_error(&error, OutputFormat::Text, &context);
         for expected in [
@@ -863,6 +887,22 @@ mod tests {
                 .unwrap()
                 .contains("docs/usage.md#choose-the-change-path")
         );
+    }
+
+    #[test]
+    fn later_preflight_failure_does_not_erase_prior_mutations() {
+        let cli =
+            Cli::try_parse_from(["nemoclaw", "apply", "spark.yaml", "--progress", "off"]).unwrap();
+        let context = RenderContext::new(&cli);
+        let error = nemoclaw_sdk::config::ConfigError::new("later-stage validation failed");
+        let observe = context.progress(Arc::new(|_| {}));
+        observe(nemoclaw_sdk::Progress::MutationStarted);
+        observe(nemoclaw_sdk::Progress::Planning);
+        for format in [OutputFormat::Text, OutputFormat::Json] {
+            let report = render_error(&error, format, &context);
+            assert!(report.contains("Changes may already have been made"));
+            assert!(!report.contains("No runtime resources changed"));
+        }
     }
 
     #[test]

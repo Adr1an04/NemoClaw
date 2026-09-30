@@ -1862,6 +1862,15 @@ async fn pi_start_failure_names_the_sandbox_in_cli_text_and_json_and_allows_dest
         assert_eq!(failed.status.code(), Some(1));
         let stdout = String::from_utf8(failed.stdout).unwrap();
         let stderr = String::from_utf8(failed.stderr).unwrap();
+        let rendered = if format == "json" { &stdout } else { &stderr };
+        assert!(
+            rendered.contains("Changes may already have been made"),
+            "{rendered}"
+        );
+        assert!(
+            !rendered.contains("No runtime resources changed"),
+            "{rendered}"
+        );
         let message = if format == "json" {
             let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
             assert_eq!(report["outcome"], "failed");
