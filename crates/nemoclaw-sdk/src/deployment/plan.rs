@@ -34,8 +34,17 @@ fn observation(
         }
         return Ok(false);
     }
-    let expected = (change.address.starts_with("data.docker_image.")
-        && allowed.contains_key(&change.address))
+    let runtime_image = ["runtime_image_present_", "runtime_image_acquired_"]
+        .iter()
+        .any(|prefix| {
+            change
+                .address
+                .strip_prefix(&format!("data.nemoclaw_runtime_image.{prefix}"))
+                .is_some_and(|name| allowed.contains_key(&format!("docker_container.{name}")))
+        });
+    let expected = runtime_image
+        || (change.address.starts_with("data.docker_image.")
+            && allowed.contains_key(&change.address))
         || crate::compile::is_gateway_observation(&change.address)
         || crate::discovery_graph::is_observation(&change.address)
         || allowed.keys().any(|address| {

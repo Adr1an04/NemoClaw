@@ -102,6 +102,7 @@ impl DiscoveryReport {
                     DiscoveryObservation::Engine(value) => value.status == Available,
                     DiscoveryObservation::Hardware(value) => value.status == Available,
                     DiscoveryObservation::Inference(value) => value.status == Available,
+                    DiscoveryObservation::RuntimeImage(value) => value.status == Available,
                     DiscoveryObservation::Gateway(value) => {
                         value.status == Available && value.compatible == Some(true)
                     }
@@ -150,6 +151,7 @@ fn observation_name(address: &str) -> Option<String> {
     } else {
         [
             "data.nemoclaw_fabric_capabilities.",
+            "data.nemoclaw_runtime_image.",
             "data.nemoclaw_target_hardware.",
             "data.nemoclaw_inference_capabilities.",
         ]
@@ -162,6 +164,8 @@ pub(super) fn category(name: &str) -> &'static str {
         "engine"
     } else if name == "gateway" {
         "gateway"
+    } else if name.starts_with("runtime_image_") {
+        "runtime_image"
     } else if name.starts_with("target_") {
         "hardware"
     } else if name.starts_with("endpoint_") {
@@ -176,6 +180,7 @@ pub(super) fn unverified_message(name: &str) -> String {
     match category(name){
         "engine"=>"Selected engine capabilities are unverified; provider discovery could not establish prerequisites.",
         "gateway"=>"Gateway version and compute-driver compatibility remain unverified until its provider observation completes.",
+        "runtime_image"=>"Runtime image compatibility remains unverified until the image is acquired and its runtime specification is checked.",
         "hardware"=>"Target hardware inventory remains unverified; requirements are still checked by the owning runtime.",
         "inference"=>"Inference endpoint catalog remains unverified from the control host; sandbox connectivity and generation APIs require their own checks.",
         "service"=>"Managed inference readiness is checked during apply; plan does not establish current service readiness.",
@@ -277,6 +282,9 @@ impl Plan {
                         serde_json::from_str(encoded).map_err(invalid)?,
                     ),
                     "hardware" => DiscoveryObservation::Hardware(
+                        serde_json::from_str(encoded).map_err(invalid)?,
+                    ),
+                    "runtime_image" => DiscoveryObservation::RuntimeImage(
                         serde_json::from_str(encoded).map_err(invalid)?,
                     ),
                     "inference" => DiscoveryObservation::Inference(

@@ -160,6 +160,12 @@ impl Provider for NemoClawProvider {
                 )) as Box<dyn DynamicDataSource>,
             ),
             (
+                "runtime_image".into(),
+                Box::new(crate::runtime_image::RuntimeImageDataSource(
+                    self.backend.clone(),
+                )) as Box<dyn DynamicDataSource>,
+            ),
+            (
                 "service_readiness".into(),
                 Box::new(crate::readiness::ReadinessDataSource(self.backend.clone()))
                     as Box<dyn DynamicDataSource>,
