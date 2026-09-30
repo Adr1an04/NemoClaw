@@ -47,7 +47,9 @@ Prepare and configure compare a generation token atomically before changing the 
 Lifecycle attempts invalidate the token even when they fail; rejected requests and confirmed no-ops preserve it.
 Snapshot reads remain available during invocation and stop.
 Ordinary apply uses configure directly; prepare is an explicit bridge operation.
-OpenTofu continues to order resource changes.
+OpenTofu orders dependency changes before agent configuration through its resource graph.
+The protocol adds no separate maintenance gate, consumer inventory, or requirement to stop agents before dependency updates.
+The deployment’s existing apply lock and resource ownership checks still apply.
 
 The host allows four seconds for graceful shutdown, removes only its own socket, and retains agent files.
 The pinned OpenShell does not guarantee that every descendant terminates when the host exits; full process cleanup remains an upstream requirement.
