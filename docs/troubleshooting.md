@@ -45,6 +45,7 @@ Do not attach environment dumps, TLS private keys, interface tokens, or the enti
 | Plan would remove or replace a resource | Check [update constraints](usage.md#updates-and-recovery) and the relevant configuration guide before choosing a new deployment |
 | Interrupted apply | Resolve the cause and reapply the original YAML with its retained state |
 | Unfinished destroy | Resume destroy with the same state; other operations refuse unfinished teardown |
+| `adapter/<id> compatibility rejected` | Read the named sandbox and canonical field; for `models.<role>.max_tokens`, remove that route's `overrides.maxTokens` or choose an adapter that accepts it, then plan again; see [compatibility diagnostics](validation/fabric-compatibility-linux-arm64.md) |
 | Public Fabric configuration mismatch or native startup rejection | Follow [agent interface diagnosis](interfaces.md#diagnose-failures); retained public configuration checks do not audit native files or tokens |
 
 For proxy policies, the pinned OpenShell supervisor can add read-only `/var/log` access to the loaded policy.
