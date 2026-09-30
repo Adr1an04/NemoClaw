@@ -277,7 +277,7 @@ pub struct Image {
 #[serde(default, deny_unknown_fields)]
 /// Sandbox runtime selected through OpenShell.
 pub struct Runtime {
-    #[serde(rename = "provider", deserialize_with = "super::kinds::runtime_driver")]
+    #[serde(rename = "provider")]
     #[schemars(default)]
     /// Docker or Podman driver. A managed service with Podman requires explicit service placement.
     pub provider: super::ComputeDriver,
@@ -360,7 +360,7 @@ pub struct Route {
     /// Inline inference definition owned by this route. Excludes providerRef and must not shadow an enclosing definition.
     pub provider: Option<InferenceProvider>,
     #[serde(rename = "overrides")]
-    /// Model selection, optional native tuning, and optional legacy model metadata.
+    /// Model selection, shared limits, and optional native settings.
     pub overrides: Overrides,
 }
 

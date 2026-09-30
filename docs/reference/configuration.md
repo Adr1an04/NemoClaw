@@ -887,7 +887,7 @@ Paths:
 | Field | Input type | Required | Default | Description and constraints |
 |---|---|---|---|---|
 | `name` | string | Yes | — | Unique lowercase name for this model choice. Constraints: pattern `^[a-z][a-z0-9-]{0,39}$`. |
-| `overrides` | [Overrides](#overrides) | Yes | — | Model selection, optional native tuning, and optional legacy model metadata. |
+| `overrides` | [Overrides](#overrides) | Yes | — | Model selection, shared limits, and optional native settings. |
 | `provider` | [InferenceProvider](#inferenceprovider) | No | — | Inline inference definition owned by this route. Excludes providerRef and must not shadow an enclosing definition. |
 | `providerRef` | string | No | — | Name of an enclosing inference provider. Exactly one of providerRef or provider is required. Constraints: pattern `^[a-z][a-z0-9-]{0,39}$`. |
 
@@ -903,7 +903,7 @@ Paths:
 
 | Field | Input type | Required | Default | Description and constraints |
 |---|---|---|---|---|
-| `provider` | string | No | `"docker"` | Docker or Podman driver. A managed service with Podman requires explicit service placement. Constraints: `""` or `"docker"` or `"podman"`. Omitted or empty selects the default. |
+| `provider` | string | No | `"docker"` | Docker or Podman driver. A managed service with Podman requires explicit service placement. Constraints: `"docker"` or `"podman"`. |
 
 ## Sandbox
 

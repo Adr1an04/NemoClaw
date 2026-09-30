@@ -123,17 +123,10 @@ pub(super) fn constrain(root: &mut Value, normalized: bool) {
     defs["Image"]["properties"]["ref"]["x-nemoclaw-default-rule"] = json!(
         "Omitted or empty selects the generic SDK agent image pin; verify that it contains the selected Fabric adapter."
     );
-    let driver_values = defs["Runtime"]["properties"]["provider"]
-        .as_object_mut()
-        .unwrap()
-        .remove("enum")
-        .expect("derived compute driver choices");
-    optional_string(
+    property(
         &mut defs["Runtime"],
         "provider",
-        c::RUNTIME,
-        &json!({"enum": driver_values}),
-        normalized,
+        json!({"default": super::super::ComputeDriver::default()}),
     );
     optional_string(
         &mut defs["Network"],
@@ -315,7 +308,7 @@ pub(super) fn constrain(root: &mut Value, normalized: bool) {
     root["allOf"].as_array_mut().unwrap().push(json!({
         "if": at("spec/gateway/management", json!({"const":"managed"}), true),
         "then": {"anyOf": [
-            at("spec/sandboxes/[]/runtime/provider", json!({"enum":["", "docker"]}), false),
+            at("spec/sandboxes/[]/runtime/provider", json!({"const":"docker"}), false),
             at("spec/sandboxes/[]/runtime/provider", json!({"const":"podman"}), true)
         ]}
     }));

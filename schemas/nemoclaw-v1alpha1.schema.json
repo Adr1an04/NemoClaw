@@ -1882,7 +1882,7 @@
         },
         "overrides": {
           "$ref": "#/$defs/Overrides",
-          "description": "Model selection, optional native tuning, and optional legacy model metadata."
+          "description": "Model selection, shared limits, and optional native settings."
         },
         "provider": {
           "$ref": "#/$defs/InferenceProvider",
@@ -1905,21 +1905,13 @@
       "description": "Sandbox runtime selected through OpenShell.",
       "properties": {
         "provider": {
-          "anyOf": [
-            {
-              "const": ""
-            },
-            {
-              "enum": [
-                "docker",
-                "podman"
-              ]
-            }
-          ],
           "default": "docker",
           "description": "Docker or Podman driver. A managed service with Podman requires explicit service placement.",
-          "type": "string",
-          "x-nemoclaw-default-rule": "Omitted or empty selects the default."
+          "enum": [
+            "docker",
+            "podman"
+          ],
+          "type": "string"
         }
       },
       "type": "object"
@@ -3138,10 +3130,7 @@
                         "runtime": {
                           "properties": {
                             "provider": {
-                              "enum": [
-                                "",
-                                "docker"
-                              ]
+                              "const": "docker"
                             }
                           }
                         }
