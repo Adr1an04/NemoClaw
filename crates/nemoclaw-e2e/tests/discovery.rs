@@ -314,7 +314,7 @@ async fn compiled_discovery_conditions_reject_known_mismatch_and_allow_unknown_m
                 "{diagnostics}"
             );
             assert!(
-                diagnostics.contains("contradicts the configured platform"),
+                diagnostics.contains("sandbox/assistant: adapter/nvidia.fabric.openclaw"),
                 "{diagnostics}"
             );
         }

@@ -67,6 +67,18 @@ pub(crate) fn populate(
         let requirements =
             crate::fabric_capabilities::FabricRequirements::for_sandbox(document, sandbox)?;
         let name = format!("sandbox_{index}");
+        let adapter = requirements.configuration["harness"]["adapter_id"]
+            .as_str()
+            .expect("resolved adapter");
+        let context = literal(&format!(
+            "sandbox/{}: adapter/{} compatibility rejected",
+            sandbox.name,
+            crate::fabric_capabilities::diagnostic_field(adapter)
+        ));
+        let rejection = format!(
+            r#"${{join("; ", concat([{}], [for check in jsondecode(self.observation_json).compatibility.checks : format("%s: %s", check.requirement, check.reason) if check.status == "unsupported"]))}}"#,
+            serde_json::to_string(&context).expect("diagnostic context"),
+        );
 
         graph["data"]["nemoclaw_fabric_capabilities"][&name] = json!({
             "engine": engine,
@@ -76,7 +88,7 @@ pub(crate) fn populate(
             "operating_system": "${jsondecode(data.nemoclaw_engine_capabilities.current.observation_json).operating_system}",
             "lifecycle": { "postcondition": [{
                 "condition": "${self.compatibility_status != \"unsupported\"}",
-                "error_message": "The selected image or Fabric adapter contradicts the configured platform, adapter settings, native features, or filesystem grants. Revise the image or configuration."
+                "error_message": rejection
             }] }
         });
         observations.insert(

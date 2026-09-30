@@ -160,3 +160,60 @@ fn explicit_filesystem_policy_must_allow_the_image_runtime_directory() {
         Support::Supported
     );
 }
+
+#[test]
+fn rejected_model_limit_identifies_the_field_and_authored_route_without_values() {
+    use nemoclaw_sdk::{
+        config::Document,
+        fabric_capabilities::{FabricRequirements, Support, assess_fabric},
+    };
+    let mut input: serde_json::Value =
+        serde_saphyr::from_str(include_str!("fixtures/config/local.yaml")).unwrap();
+    input["spec"]["sandboxes"][0]["harness"]["kind"] = "nvidia.fabric.pi".into();
+    input["spec"]["sandboxes"][0]["agent"]["inference"]["routes"][0]["name"] = "fast".into();
+    input["spec"]["sandboxes"][0]["agent"]["inference"]["routes"][0]["overrides"]["maxTokens"] =
+        256.into();
+    let document = Document::parse(input.to_string().as_bytes()).unwrap();
+    let mut request =
+        FabricRequirements::for_sandbox(&document, &document.spec.sandboxes[0]).unwrap();
+    let report = assess_fabric(&FabricCatalog::bundled(), &request);
+    assert_eq!(report.status, Support::Unsupported);
+    let text = serde_json::to_string(&report).unwrap();
+    for expected in [
+        "nvidia.fabric.pi",
+        "models.default.max_tokens",
+        "overrides.maxTokens",
+        "fast",
+    ] {
+        assert!(text.contains(expected), "{expected}: {text}");
+    }
+    for model in request.configuration["models"]
+        .as_object_mut()
+        .unwrap()
+        .values_mut()
+    {
+        model.as_object_mut().unwrap().remove("max_tokens");
+    }
+    assert_eq!(
+        assess_fabric(&FabricCatalog::bundled(), &request).status,
+        Support::Supported
+    );
+}
+
+#[test]
+fn schema_rejection_reports_a_field_without_echoing_its_secret_value() {
+    use nemoclaw_sdk::fabric_capabilities::{FabricRequirements, Support, assess_fabric};
+    let mut configuration = config();
+    configuration["harness"]["settings"]["budget"] = "PRIVATE_SENTINEL\u{1b}[31m".into();
+    let report = assess_fabric(
+        &catalog(),
+        &FabricRequirements {
+            configuration,
+            filesystem_read: None,
+        },
+    );
+    assert_eq!(report.status, Support::Unsupported);
+    let text = serde_json::to_string(&report).unwrap();
+    assert!(text.contains("harness.settings.budget"), "{text}");
+    assert!(!text.contains("PRIVATE_SENTINEL"));
+}
