@@ -35,7 +35,7 @@ Do not attach environment dumps, TLS private keys, interface tokens, or the enti
 
 | Symptom | Next action |
 |---|---|
-| Unknown field, duplicate key, or rejected combination | Compare the input with the matching [configuration reference](reference/configuration.md); an earlier schema is not automatically migrated |
+| Unknown field, duplicate key, or rejected combination | Use the [document path and source position](#correct-a-document-validation-error), then compare the input with the matching [configuration reference](reference/configuration.md) |
 | Bundle or schema hash failure | Follow [bundle rebuilding](build.md#build-a-native-bundle) and keep the selected bundle unchanged during operations |
 | `state is bound to a different deployment UID or gateway` | Restore the original UID and gateway endpoint; a new target needs separate state and resources |
 | `unfinished apply has different intent` | Reapply the exact YAML from the unfinished operation before trying another configuration |
@@ -55,6 +55,24 @@ The [SDK errors](../crates/nemoclaw-sdk/src/error.rs), [plan checks](../crates/n
 
 An ownership error is not fixed by renaming a resource, deleting `intent.json`, editing OpenTofu state, or rerunning with a fresh state path against the same resources.
 Retain the original binding while investigating the selected gateway and engine.
+
+## Correct a Document Validation Error
+
+Schema errors identify the document field, the violated constraint, and the source line and column.
+For example, `spec.services.qwen.memory.kvCacheGiB` identifies the `qwen` service; `spec.sandboxes[1]` identifies the second sandbox.
+Array indices start at zero; source lines and columns start at one, and columns count characters.
+Valid declaration names appear in paths, while arbitrary map keys appear as `[entry]` and rejected values remain omitted.
+YAML syntax and duplicate-key errors also include source positions without copying source snippets.
+Later semantic checks, such as unresolved references, retain their existing named-field diagnostics and may lack source positions.
+
+For `kvCacheGiB`, use `0` or an integer from `4` through `12` when `gpuMemoryUtilization` is absent.
+With `gpuMemoryUtilization`, `kvCacheGiB` must be omitted or zero; see the [Memory reference](reference/configuration.md#memory) for defaults and related settings.
+An `empty document` error means no configuration content was supplied.
+All explicit YAML tags, including `!!binary`, `!!str`, `!!map`, and `!!seq`, are rejected; write the intended value directly and quote strings when needed.
+Tag-like text inside a quoted or block string is preserved.
+
+Correct the input, then rerun plan with the same state directory before choosing apply.
+The [validation diagnostic qualification](validation/configuration-diagnostics-linux-arm64.md) records the tests and CLI checks.
 
 ## Recover a Managed Gateway Startup Failure
 

@@ -28,6 +28,7 @@ The subsequent [managed Podman qualification](rust-managed-podman-linux-arm64.md
 
 | Behavior | Tests and Results |
 |---|---|
+| Document validation paths, safe source positions, strict YAML tags, and conditional memory bounds | [Linux ARM64 configuration diagnostics](configuration-diagnostics-linux-arm64.md) |
 | Named OpenShell startup reasons, safe explanations, and failed-first-apply teardown | [Linux ARM64 sandbox startup qualification](sandbox-startup-linux-arm64.md) |
 | Fabric runtime error codes, named sandbox failures, and retained-state recovery | [Linux ARM64 runtime failure qualification](fabric-runtime-failure-linux-arm64.md) |
 | Named Fabric compatibility rejections, safe field details, and Pi model-token overrides | [Linux ARM64 compatibility diagnostics](fabric-compatibility-linux-arm64.md) |
