@@ -59,8 +59,110 @@ class RuntimeLifecycle(unittest.IsolatedAsyncioTestCase):
             # A process restart waits for apply to establish current routes.
             restarted = RuntimeHost("main", Path(directory))
             self.assertFalse(restarted.status()["ready"])
+            self.assertIsNone(restarted.status()["config"])
             await host.stop()
             runtime.stop.assert_awaited_once()
+            self.assertIsNone(host.status()["config"])
+            self.assertIsNone(host.status()["runtime_id"])
+
+    async def test_starting_runtime_does_not_publish_configuration_before_success(self):
+        config = {
+            "metadata": {"name": "main"},
+            "harness": {"adapter_id": "vendor.new", "settings": {"nested": [1, 2]}},
+        }
+        expected = copy.deepcopy(config)
+        entered = asyncio.Event()
+        finish = asyncio.Event()
+        runtime = SimpleNamespace(runtime_id="owned", status="active", stop=AsyncMock())
+
+        async def start(*args, **kwargs):
+            entered.set()
+            await finish.wait()
+            return runtime
+
+        fabric = SimpleNamespace(plan=Mock(), start_runtime=AsyncMock(side_effect=start))
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("fabric.Fabric", return_value=fabric),
+        ):
+            host = RuntimeHost("main", Path(directory))
+            configuring = asyncio.create_task(host.configure(config))
+            try:
+                async with asyncio.timeout(1):
+                    await entered.wait()
+                async with asyncio.timeout(1):
+                    snapshot = await host.handle({"operation": "status"})
+                self.assertEqual(snapshot, {"config": None, "runtime_id": None, "ready": False})
+                config["harness"]["settings"]["nested"].append(3)
+                finish.set()
+                async with asyncio.timeout(1):
+                    snapshot = await configuring
+                self.assertEqual(snapshot["config"], expected)
+                self.assertEqual(snapshot["runtime_id"], "owned")
+                self.assertTrue(snapshot["ready"])
+            finally:
+                configuring.cancel()
+                await asyncio.gather(configuring, return_exceptions=True)
+
+    async def test_status_snapshot_cannot_change_the_applied_configuration(self):
+        config = {
+            "metadata": {"name": "main"},
+            "harness": {"adapter_id": "vendor.new", "settings": {"nested": [1, 2]}},
+        }
+        runtime = SimpleNamespace(runtime_id="owned", status="active", stop=AsyncMock())
+        fabric = SimpleNamespace(plan=Mock(), start_runtime=AsyncMock(return_value=runtime))
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("fabric.Fabric", return_value=fabric),
+        ):
+            host = RuntimeHost("main", Path(directory))
+            snapshot = await host.configure(config)
+            snapshot["config"]["harness"]["settings"]["nested"].append(3)
+            self.assertEqual(host.status()["config"], config)
+            await host.configure(config)
+            fabric.start_runtime.assert_awaited_once()
+            runtime.stop.assert_not_awaited()
+
+    async def test_stopping_runtime_keeps_configuration_until_stop_is_confirmed(self):
+        config = {"metadata": {"name": "main"}, "harness": {"adapter_id": "vendor.new"}}
+        entered = asyncio.Event()
+        finish = asyncio.Event()
+
+        async def stop():
+            entered.set()
+            await finish.wait()
+
+        runtime = SimpleNamespace(
+            runtime_id="owned", status="active", stop=AsyncMock(side_effect=stop)
+        )
+        fabric = SimpleNamespace(plan=Mock(), start_runtime=AsyncMock(return_value=runtime))
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("fabric.Fabric", return_value=fabric),
+        ):
+            host = RuntimeHost("main", Path(directory))
+            await host.configure(config)
+            preparing = asyncio.create_task(
+                host.prepare({**config, "harness": {"adapter_id": "vendor.changed"}})
+            )
+            try:
+                async with asyncio.timeout(1):
+                    await entered.wait()
+                async with asyncio.timeout(1):
+                    snapshot = await host.handle({"operation": "status"})
+                self.assertEqual(snapshot["config"], config)
+                self.assertEqual(snapshot["runtime_id"], "owned")
+                self.assertFalse(snapshot["ready"])
+                finish.set()
+                async with asyncio.timeout(1):
+                    await preparing
+                self.assertIsNone(host.status()["config"])
+                self.assertIsNone(host.status()["runtime_id"])
+                self.assertEqual(snapshot["config"], config)
+                self.assertEqual(snapshot["runtime_id"], "owned")
+            finally:
+                preparing.cancel()
+                await asyncio.gather(preparing, return_exceptions=True)
 
     async def test_invalid_configuration_preserves_the_running_runtime_and_saved_intent(self):
         config = {"metadata": {"name": "main"}, "harness": {"adapter_id": "vendor.new"}}
@@ -183,7 +285,8 @@ class RuntimeLifecycle(unittest.IsolatedAsyncioTestCase):
                 },
             )
             self.assertFalse(host.status()["ready"])
-            self.assertEqual(host.status()["config"], revised)
+            self.assertIsNone(host.status()["config"])
+            self.assertIsNone(host.status()["runtime_id"])
             runtime.stop.assert_awaited_once()
             self.assertEqual(fabric.start_runtime.await_count, 2)
             fabric.start_runtime.side_effect = None
@@ -195,6 +298,8 @@ class RuntimeLifecycle(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(FabricRuntimeError) as failed:
                 await host.stop()
             self.assertEqual(host.failure(failed.exception)["error"]["runtime_state"], "unknown")
+            self.assertEqual(host.status()["config"], revised)
+            self.assertEqual(host.status()["runtime_id"], "owned")
 
     async def test_wrong_agent_identity_cannot_invoke_the_bound_runtime(self):
         result = {"status": "succeeded", "output": "native"}

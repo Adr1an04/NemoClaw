@@ -52,7 +52,7 @@ class RuntimeHost:
 
     def status(self):
         return {
-            "config": self.config,
+            "config": copy.deepcopy(self.config),
             "runtime_id": self.runtime.runtime_id if self.runtime else None,
             "ready": self.runtime is not None
             and not self.stopping
@@ -80,6 +80,7 @@ class RuntimeHost:
             self.stopping = True
             await self.runtime.stop()
             self.runtime = None
+            self.config = None
             self.stopping = False
 
     async def prepare(self, config):
@@ -90,6 +91,7 @@ class RuntimeHost:
             return {"prepared": True}
 
     async def configure(self, config):
+        config = copy.deepcopy(config)
         typed = self.validate(config)
         async with self.lock:
             if self.status()["ready"] and self.config == config:
@@ -97,8 +99,10 @@ class RuntimeHost:
             # OpenTofu retains desired configuration. A new host waits for
             # explicit apply so startup cannot outrun current gateway routes.
             await self.stop()
-            self.config = copy.deepcopy(config)
             self.runtime = await self.fabric.start_runtime(typed, base_dir=self.directory)
+            # Publish the configuration only once Fabric returns its runtime.
+            # No await separates the runtime and configuration assignments.
+            self.config = config
             return self.status()
 
     async def handle(self, request):
