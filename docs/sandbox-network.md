@@ -54,7 +54,8 @@ An omitted `filesystem_policy` retains OpenShell defaults and is outside this ex
 
 Each error names the required path; edit the authored policy and rerun plan.
 NemoClaw does not add filesystem grants automatically.
-These checks do not verify image contents, Unix permissions, writable state directories, or kernel enforcement; those still require runtime verification.
+The image catalog records adapter requirements and runtime files, not a complete filesystem or executable inventory.
+These checks do not verify arbitrary policy paths, process identities in the image, Unix permissions, writable state directories, or kernel enforcement; those still require runtime verification.
 
 ## Choose TLS Inspection and Enforcement
 
@@ -116,7 +117,22 @@ Back up sandbox files and conversation history before using the explicit [destro
 Destroy deletes those sandbox files; retained workspace and model storage follow the existing lifecycle rules.
 If an operation fails, preserve the state directory, resolve the reported observation or configuration problem, and retry with the retained configuration.
 
-Local fixture tests exercise creation, drift detection, and export/reapply behavior.
+### Recover from Runtime Policy Rejection
+
+If OpenShell reports configuration admission as rejected, apply stops its startup wait and reports `sandbox/<name>: OpenShell configuration rejected`, followed by a safe reason.
+This check applies while the sandbox is starting and before agent configuration or health requests.
+Known gateway diagnostics identify policy, attached-provider, or middleware repair; unrecognized text becomes a fixed configuration-repair message.
+The error does not include raw supervisor parser output.
+A sandbox that has not reported rejection still follows the ordinary startup wait.
+
+Preserve the state directory: failed apply retains created resource bindings.
+If the problem is an attached-provider or credential configuration that can be repaired without replacing the sandbox, correct it and reapply using the retained state.
+Apply can deliver that repair; completion still requires OpenShell to accept the configuration.
+If the authored sandbox policy must change, use the [destroy and recreate procedure](usage.md#destroy); ordinary apply still refuses policy replacement.
+Destroy remains available after the failed first apply and does not require successful admission or readiness.
+See the [policy rejection fixture results](validation/policy-rejection-linux-arm64.md) for tested recovery paths and live-test limits.
+
+Local fixture tests exercise creation, rejection, drift detection, and export/reapply behavior.
 They do not establish proxy reachability or kernel enforcement on a live host.
 
 ## Earlier Policy Workflows

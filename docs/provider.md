@@ -256,6 +256,12 @@ Its required `sandbox` map carries the sandbox resource's binding and configurat
 It does not invoke an agent or model.
 The optional string `read_trigger` uses `uuid()` in generated graphs, making the read unknown during planning and recording a fresh token on every apply.
 
+Agent configuration and sandbox completion inspect the bound sandbox's OpenShell configuration admission before executing runtime commands.
+An explicit `Rejected` admission stops the startup wait even while the sandbox is `Starting`.
+The diagnostic names the sandbox and includes only recognized gateway reasons; unknown backend text becomes a fixed repair message.
+Passive refresh retains a rejected nonterminal sandbox so apply can repair attached providers, and teardown does not require admission.
+See [runtime policy rejection recovery](sandbox-network.md#recover-from-runtime-policy-rejection).
+
 The data source returns `ready`, nullable `health_json`, and nullable `error_message`.
 Runtime observation failures return `ready: false` with an error message.
 The pinned bridge's explicit unsupported response is retained in `health_json`; unrecognized reports are errors.

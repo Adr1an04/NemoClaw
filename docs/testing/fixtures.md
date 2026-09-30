@@ -71,6 +71,8 @@ The `gateway_change_between_plan_and_apply_preserves_resources_and_allows_teardo
 The direct provider fixture checks saved plans with both unchanged and newly created resources; incompatible or unavailable gateways stop dependent mutations without losing managed-resource bindings.
 The Pi lifecycle fixture verifies that this gate also blocks model configuration writes, and that unchanged apply performs no configuration writes.
 The multiple-provider fixture also verifies two independent deployments, each sandbox’s selected provider attachments, export/reapply, and drift in one deployment without changes to the other.
+The `rejected_policy_fails_promptly_with_context_and_allows_recovery_or_destroy` fixture uses the explicit-policy example and a simulated gateway admission rejection.
+It checks prompt CLI failure with sandbox context in text and JSON output, retained bindings, recovery after simulated acceptance, export/reapply, and direct destroy after rejection.
 The fixture returns protocol responses; it does not establish live agent inference.
 The export fixture checks provider refresh failures through OpenTofu, unchanged deployment state and configuration, and export without inference credentials or Fabric health requests.
 The web-search lifecycle case covers Brave and Tavily at deployment, sandbox, and agent scope, including profile and sandbox-grant drift.
@@ -88,7 +90,7 @@ NEMOCLAW_TEST_PROVIDER=/absolute/path/to/terraform-provider-nemoclaw \
 ```
 
 The fixture runs the sandbox completion data source through OpenTofu against a local gRPC server, without SDK deployment orchestration.
-It checks deferred health reads, failed postconditions with retained observations and bindings, unchanged-apply rechecks, and teardown without readiness.
+It checks deferred health reads, failed postconditions with retained observations and bindings, unchanged-apply rechecks, prompt configuration-admission rejection with safe sandbox context, and teardown without readiness.
 It creates temporary state and simulated OpenShell resources; it does not start containers or invoke a model.
 On failure, inspect the OpenTofu diagnostic and verify that the selected provider matches the checkout before rerunning.
 
