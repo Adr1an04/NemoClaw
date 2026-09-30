@@ -26,7 +26,7 @@ The image workflow qualifies the installed native adapters against owned local i
 
 `fabric/fabric.py` retains the deployment host: the pinned Fabric SDK has no process host for configure, unchanged apply, and invocation across OpenShell exec calls.
 The host delegates configuration and runtime operations to Fabric; its health command reports unsupported because the pinned SDK has no health API.
-The [provider command helper](../crates/nemoclaw-provider/src/openshell/agent.rs) retains the fixed launch interface for this packaged bridge.
+The [provider command helper](../crates/nemoclaw-provider/src/openshell/agent.rs) reads the retained image command prefix for serve, configure, check, status, and health operations.
 
 [`build_fabric.py`](build_fabric.py) builds local images, runs Fabric discovery in each installed environment without starting an adapter, and attaches the returned snapshot as `io.nemoclaw.fabric.catalog`.
 It selects installed-package records using Fabric provenance and preserves the descriptor contents.
@@ -42,8 +42,10 @@ Installed catalog generation requires this manifest and records it under `runtim
 Each adapter also receives the actual `ADAPTER_PYTHON` interpreter path because the host runs Python adapters in-process.
 Missing executables, required paths, or the installed-image manifest fail catalog generation.
 The SDK preserves and validates this metadata during image discovery.
-Runtime launch and network-policy consumers still use their existing definitions; consuming the advertised layout and isolating image-specific provider grants remain part of issues [#12439](https://github.com/NVIDIA/NemoClaw/issues/12439) and [#12425](https://github.com/NVIDIA/NemoClaw/issues/12425).
-The [ARM64 metadata qualification](../docs/validation/image-runtime-metadata-linux-arm64.md) covers publication and decoding, not deployment with a relocated image.
+The SDK compiles image discovery into each sandbox's launch and policy, retaining the binding in state and OpenShell annotations for refresh and teardown.
+Provider profiles use the selected adapter's nonempty executable list; inference and search registrations are scoped by immutable image and adapter identity so different images do not combine executable permissions.
+An explicit sandbox policy replaces the image's filesystem and process defaults while preserving deployment-managed endpoint grants.
+The [ARM64 metadata qualification](../docs/validation/image-runtime-metadata-linux-arm64.md) records the earlier publication-only checks; the [consumer qualification](../docs/validation/image-runtime-consumers-linux-arm64.md) covers the subsequent deployment integration.
 
 `fabric/catalog.json` is an offline snapshot produced by Fabric discovery at the revision and checksum recorded in that file and pinned in the Dockerfile.
 2026-09-24: serialize canonical descriptor records and provenance without local adapter additions or native schema patches.
