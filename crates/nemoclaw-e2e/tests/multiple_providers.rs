@@ -36,6 +36,15 @@ async fn provider_union_export_reapply_drift_and_destroy_remain_scoped_to_each_s
         Document::parse(include_str!("../../../examples/multiple-providers.yaml").as_bytes())
             .unwrap();
     *first.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    // A closed loopback port fails the same way on every runner, so repeated
+    // observations stay identical instead of timing out on the example hosts.
+    for provider in &mut first.spec.inference_providers {
+        provider.endpoint = match provider.endpoint.split_once("://") {
+            Some(("https", _)) => "https://127.0.0.1:9/v1",
+            _ => "http://127.0.0.1:9/v1",
+        }
+        .into();
+    }
     let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut first).await;
     let mut second = first.clone();
     second.metadata.uid = "7db61f79-1965-45ac-824a-1c3f3b26aa5d".into();
