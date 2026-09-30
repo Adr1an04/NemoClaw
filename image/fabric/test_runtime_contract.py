@@ -100,7 +100,7 @@ class RuntimeReadback(unittest.IsolatedAsyncioTestCase):
         try:
             await asyncio.wait_for(entered.wait(), 1)
             response = await asyncio.wait_for(
-                self.host.handle({"operation": "check", "agent": "main"}), 1
+                self.host.handle({"operation": "check", "agent": "main", "level": "live"}), 1
             )
             snapshot = response["result"]
             self.assertIsNone(snapshot["applied_config"])

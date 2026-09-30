@@ -191,6 +191,16 @@ class ProtocolLifecycle(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response["status"], "unsupported")
         self.runtime.invoke.assert_not_awaited()
 
+    async def test_socket_check_requires_an_explicit_level(self):
+        before = self.host.snapshot()
+        response = await self.call("check")
+        self.assertEqual(response["status"], "failed")
+        self.assertEqual(response["error"]["code"], "invalid_request")
+        self.assertFalse(response["changed"])
+        self.assertEqual(self.host.snapshot(), before)
+        self.api.plan.assert_not_called()
+        self.api.start_runtime.assert_not_awaited()
+
     async def test_wrong_agent_and_unknown_fields_do_not_change_runtime(self):
         token = self.host.snapshot()["generation"]
         for extra in ({"agent": "other"}, {"extra": True}, {"expected_generation": ""}):
@@ -209,6 +219,12 @@ class ProtocolLifecycle(unittest.IsolatedAsyncioTestCase):
 
 
 class CommandArguments(unittest.TestCase):
+    def test_check_defaults_to_live_before_sending_the_request(self):
+        self.assertEqual(
+            fabric.parse_command(["check", "--agent", "main"]),
+            {"operation": "check", "agent": "main", "level": "live"},
+        )
+
     def test_named_files_are_read_without_touching_stdin(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "config.json"
@@ -361,7 +377,6 @@ class SocketContract(unittest.IsolatedAsyncioTestCase):
             "configure", error=fabric.ProtocolError("fabric_start_failed", "start")
         )
         native["error"]["message"] = "SECRET"
-        native["error"]["stage"] = "SECRET"
         request = {
             "operation": "configure",
             "agent": "main",
@@ -371,6 +386,26 @@ class SocketContract(unittest.IsolatedAsyncioTestCase):
         response, _ = await self.exchange(request, fabric.encode(native))
         self.assertEqual(response["error"]["code"], "fabric_start_failed")
         self.assertNotIn("SECRET", json.dumps(response))
+
+    async def test_unknown_peer_diagnostic_stage_is_invalid_without_replaying(self):
+        request = {
+            "operation": "configure",
+            "agent": "main",
+            "config": CONFIG,
+            "expected_generation": "opaque",
+        }
+        for stage in ("SECRET", None, []):
+            with self.subTest(stage=stage):
+                native = fabric.envelope(
+                    "configure", error=fabric.ProtocolError("fabric_start_failed", "start")
+                )
+                native["error"]["stage"] = stage
+                response, calls = await self.exchange(request, fabric.encode(native))
+                self.assertEqual(response["error"]["code"], "invalid_response")
+                self.assertEqual(response["error"]["effects"], "unknown")
+                self.assertIsNone(response["changed"])
+                self.assertEqual(len(calls), 1)
+                self.assertNotIn("SECRET", json.dumps(response))
 
     async def test_response_limit_includes_its_newline(self):
         response = fabric.envelope(

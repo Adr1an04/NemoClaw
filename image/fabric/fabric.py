@@ -293,9 +293,6 @@ class RuntimeHost:
         result = None
         stage = "request"
         try:
-            # The CLI supplies this default; direct socket clients get the same behavior.
-            if isinstance(request, dict) and request.get("operation") == "check":
-                request = {"level": "live", **request}
             validate_request(request, self.name)
             if operation == "check":
                 result = {**self.snapshot(), "health": None}
@@ -375,7 +372,7 @@ class RuntimeHost:
                 return envelope(operation, result, changed=None)
         except Exception as error:
             if not isinstance(error, ProtocolError):
-                code = getattr(error, "code", None) if isinstance(error, FabricError) else None
+                code = error.code if isinstance(error, FabricError) else None
                 if code not in NATIVE_CODES:
                     code = (
                         f"fabric_{stage}_failed"
@@ -498,8 +495,6 @@ async def client(request):
                 or error.get("effects") not in ("none", "applied", "unknown")
             ):
                 raise ProtocolError("invalid_response", "transport")
-            # Never echo a peer's arbitrary diagnostic text.
-            error["message"] = MESSAGES[error["code"]]
             if error["stage"] not in (
                 "request",
                 "validate",
@@ -510,7 +505,9 @@ async def client(request):
                 "invoke",
                 "transport",
             ):
-                error["stage"] = "transport"
+                raise ProtocolError("invalid_response", "transport")
+            # Never echo a peer's arbitrary diagnostic text.
+            error["message"] = MESSAGES[error["code"]]
         return response
     except (OSError, ValueError, TimeoutError) as error:
         if not isinstance(error, ProtocolError):
