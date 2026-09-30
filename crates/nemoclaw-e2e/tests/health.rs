@@ -6,8 +6,7 @@ use nemoclaw_provider::openshell::OpenShell;
 use nemoclaw_sdk::{backend::Backend, compile, config::Document};
 use std::{collections::BTreeMap, sync::Arc};
 
-#[tokio::test]
-async fn health_accepts_only_the_pinned_bridge_contract_without_generation() {
+async fn sandbox() -> (Fixture, OpenShell, nemoclaw_sdk::backend::Row) {
     let fixture = Fixture::start().await;
     let mut doc = Document::parse(
         include_str!("../../nemoclaw-sdk/tests/fixtures/config/local.yaml").as_bytes(),
@@ -40,54 +39,203 @@ async fn health_accepts_only_the_pinned_bridge_contract_without_generation() {
     let mutation = client.ensure("sandbox", &target.values).await;
     assert!(mutation.error().is_none(), "{:?}", mutation.error());
     let binding = mutation.into_parts().0.unwrap();
+    (fixture, client, binding)
+}
+
+#[tokio::test]
+async fn unsupported_health_retains_the_snapshot_but_does_not_complete_apply() {
+    let (fixture, client, binding) = sandbox().await;
+    fixture.state.lock().unwrap().health_report = Some(serde_json::json!({
+        "supported": false, "report": null, "reason_code": "fabric_health_unsupported"
+    }));
     let health = client.health(&binding).await.unwrap();
     assert!(!health.supported);
+    assert!(!health.allows_apply_completion());
+    let snapshot = client.agent_snapshot(&binding).await.unwrap();
+    assert_eq!(snapshot.runtime_state, "stopped");
+    assert_eq!(snapshot.generation.as_deref(), Some("fixture:0"));
+    assert!(snapshot.applied_config.is_none());
+    let native_report = serde_json::json!({"adapter_owned": {"evidence": [1, 2, 3]}});
+    fixture.state.lock().unwrap().health_report = Some(serde_json::json!({
+        "supported": true, "report": native_report, "reason_code": null
+    }));
+    let health = client.health(&binding).await.unwrap();
     assert!(health.allows_apply_completion());
-    for (liveness, activity, readiness) in [
-        ("responsive", "busy", "ready"),
-        ("responsive", "idle", "not_ready"),
-        ("responsive", "stopping", "not_ready"),
-        ("unknown", "unknown", "unknown"),
-        ("unresponsive", "busy", "unknown"),
-        ("exited", "unknown", "not_ready"),
-    ] {
-        let report = serde_json::json!({
-            "runtime_id": "owned-runtime", "checked_at_millis": 100, "duration_millis": 2,
-            "liveness": liveness, "activity": activity, "readiness": readiness,
-            "reason_code": "fixture_observation",
-            "checks": [{"name":"inference", "status":"unsupported", "reason_code":"not_implemented", "observed_at_millis":99,"age_millis":1}]
-        });
-        fixture.state.lock().unwrap().health_report = Some(serde_json::json!({
-            "supported": true, "report": report, "reason_code": null
-        }));
-        assert!(
-            client.health(&binding).await.is_err(),
-            "unmerged health reports must not establish readiness"
-        );
-    }
+    assert_eq!(health.report, Some(native_report.clone()));
     fixture.state.lock().unwrap().health_report = Some(serde_json::json!({
-        "supported": true, "report": null, "reason_code": "fabric_health_timeout"
+        "supported": true, "report": native_report, "reason_code": "unknown"
     }));
-    assert!(client.health(&binding).await.is_err());
+    let health = client.health(&binding).await.unwrap();
+    assert!(!health.allows_apply_completion());
+    assert_eq!(health.report, Some(native_report));
+    let large_report = serde_json::json!({"data":"x".repeat(2 * 1024 * 1024)});
     fixture.state.lock().unwrap().health_report = Some(serde_json::json!({
-        "supported": false, "report": null, "reason_code": "fabric_health_timeout"
+        "supported": true, "report": large_report, "reason_code": null
     }));
-    assert!(client.health(&binding).await.is_err());
-    fixture.state.lock().unwrap().health_report =
-        Some(serde_json::json!({"secret-sentinel": true}));
-    assert!(
-        !client
-            .health(&binding)
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("secret-sentinel")
+    assert_eq!(
+        client.health(&binding).await.unwrap().report,
+        Some(large_report)
     );
+    fixture.state.lock().unwrap().exec_response = Some(vec![b'x'; 4 * 1024 * 1024 + 1]);
+    assert!(client.health(&binding).await.is_err());
+    for output in [
+        b"".as_slice(),
+        b"PRIVATE_SENTINEL",
+        br#"{"status":"succeeded"}"#,
+    ] {
+        fixture.state.lock().unwrap().exec_response = Some(output.to_vec());
+        let error = client.health(&binding).await.unwrap_err();
+        assert!(!error.to_string().contains("PRIVATE_SENTINEL"));
+        assert!(client.agent_snapshot(&binding).await.is_err());
+    }
+    let state = fixture.state.lock().unwrap();
+    assert!(state.exec_calls.iter().all(|command| {
+        command[0] == "fabric-agent"
+            && command[1] == "check"
+            && !command
+                .iter()
+                .any(|arg| arg == "--config" || arg == "invoke")
+    }));
+}
+
+#[tokio::test]
+async fn explicit_invocation_cleans_files_and_never_replays_uncertain_work() {
+    let (fixture, client, binding) = sandbox().await;
+    let input = serde_json::json!({"prompt":"PRIVATE_REQUEST_SENTINEL"});
+    for response in [
+        b"truncated".to_vec(),
+        serde_json::to_vec(&serde_json::json!({"operation":"invoke","status":"succeeded","changed":null,"result":{"runtime_id":"fixture-runtime","fabric_result":{"status":"failed"}},"error":null})).unwrap().into_iter().chain(*b"\n").collect(),
+    ] {
+        fixture.state.lock().unwrap().exec_response = Some(response);
+        let before = fixture.state.lock().unwrap().exec_calls.len();
+        let error = client.invoke_agent(&binding, &input).await.unwrap_err();
+        assert!(!error.to_string().contains("PRIVATE_REQUEST_SENTINEL"));
+        let state = fixture.state.lock().unwrap();
+        assert!(state.staged_files.is_empty());
+        let calls = &state.exec_calls[before..];
+        assert_eq!(calls.iter().filter(|args| args.get(1).is_some_and(|arg| arg == "invoke")).count(), 1);
+        assert!(!calls.iter().flatten().any(|arg| arg.contains("PRIVATE_REQUEST_SENTINEL")));
+    }
+    fixture.state.lock().unwrap().exec_exit = 1;
+    let before = fixture.state.lock().unwrap().exec_calls.len();
+    assert!(client.invoke_agent(&binding, &input).await.is_err());
     let state = fixture.state.lock().unwrap();
     assert!(
-        state
-            .exec_calls
-            .iter()
-            .all(|command| command.last().unwrap() == "health")
+        state.staged_files.is_empty(),
+        "partial stage failure must clean its file"
     );
+    assert!(
+        !state.exec_calls[before..]
+            .iter()
+            .any(|args| args.get(1).is_some_and(|arg| arg == "invoke"))
+    );
+}
+
+#[tokio::test]
+async fn fixture_generations_are_scoped_to_each_sandbox_host() {
+    let (fixture, client, first) = sandbox().await;
+    let mut desired = first.clone();
+    desired.remove("id");
+    desired.insert("name".into(), "second".into());
+    desired.insert("agent_name".into(), "second".into());
+    let created = client.ensure("sandbox", &desired).await;
+    assert!(created.error().is_none(), "{:?}", created.error());
+    let second = created.into_parts().0.unwrap();
+    let first_generation = client
+        .agent_snapshot(&first)
+        .await
+        .unwrap()
+        .generation
+        .unwrap();
+    let second_generation = client
+        .agent_snapshot(&second)
+        .await
+        .unwrap()
+        .generation
+        .unwrap();
+    for (binding, generation) in [(&first, first_generation), (&second, second_generation)] {
+        let path = format!("/sandbox/{}.json", binding["agent_name"]);
+        fixture.state.lock().unwrap().staged_files.insert(
+            path.clone(),
+            serde_json::to_vec(&serde_json::json!({"metadata":{"name":binding["agent_name"]}}))
+                .unwrap(),
+        );
+        let (exit, output) = client
+            .exec_bound(
+                binding,
+                [
+                    "fabric-agent",
+                    "configure",
+                    "--agent",
+                    &binding["agent_name"],
+                    "--config",
+                    &path,
+                    "--expected-generation",
+                    &generation,
+                ]
+                .map(String::from)
+                .to_vec(),
+                Default::default(),
+                20,
+            )
+            .await
+            .unwrap();
+        assert_eq!(exit, 0, "{}", String::from_utf8_lossy(&output));
+    }
+    assert_eq!(fixture.state.lock().unwrap().fabric_configurations.len(), 2);
+    let second_before = client.agent_snapshot(&second).await.unwrap();
+    let first_generation = client
+        .agent_snapshot(&first)
+        .await
+        .unwrap()
+        .generation
+        .unwrap();
+    for (operation, generation) in [
+        ("prepare", first_generation),
+        ("configure", "fixture:2".into()),
+    ] {
+        let (exit, output) = client
+            .exec_bound(
+                &first,
+                [
+                    "fabric-agent",
+                    operation,
+                    "--agent",
+                    &first["agent_name"],
+                    "--config",
+                    &format!("/sandbox/{}.json", first["agent_name"]),
+                    "--expected-generation",
+                    &generation,
+                ]
+                .map(String::from)
+                .to_vec(),
+                Default::default(),
+                20,
+            )
+            .await
+            .unwrap();
+        assert_eq!(exit, 0, "{}", String::from_utf8_lossy(&output));
+        let second_after = client.agent_snapshot(&second).await.unwrap();
+        assert_eq!(second_after.generation, second_before.generation);
+        assert_eq!(second_after.runtime_state, "running");
+        assert_eq!(second_after.runtime_id, second_before.runtime_id);
+        assert_eq!(second_after.applied_config, second_before.applied_config);
+    }
+}
+
+#[tokio::test]
+async fn fixture_confirmed_stop_clears_the_reported_configuration_association() {
+    let (fixture, client, binding) = sandbox().await;
+    {
+        let mut state = fixture.state.lock().unwrap();
+        state.fabric_configurations.insert(
+            binding["id"].clone(),
+            serde_json::json!({"metadata":{"name":binding["agent_name"]}}),
+        );
+        state.fabric_stopped.insert(binding["id"].clone());
+    }
+    let snapshot = client.agent_snapshot(&binding).await.unwrap();
+    assert_eq!(snapshot.runtime_state, "stopped");
+    assert!(snapshot.runtime_id.is_none());
+    assert!(snapshot.applied_config.is_none());
 }

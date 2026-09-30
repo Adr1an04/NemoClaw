@@ -6,6 +6,8 @@ mod tests;
 
 mod agent;
 mod agent_configuration;
+mod protocol;
+pub use protocol::AgentSnapshot;
 mod network;
 mod profile;
 pub use nemoclaw_sdk::config::{
@@ -200,7 +202,9 @@ fn sandbox_row(
     if spec.providers != expected_providers {
         return Err(ObservationError::BindingMismatch);
     }
-    if image.is_empty() || spec.command != command(&runtime) || environment != expected_environment
+    if image.is_empty()
+        || spec.command != command(&runtime, agent)
+        || environment != expected_environment
     {
         return Err(ObservationError::BindingMismatch);
     }

@@ -42,6 +42,11 @@ async fn harness_reconciles_configuration_and_protects_sandbox_identity(harness:
     let inference = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     document.spec.inference_providers[0].endpoint =
         format!("http://{}/v1", inference.local_addr().unwrap());
+    let request_line = if harness == "claude" {
+        "GET /v1/models?limit=1000 HTTP/1.1\r\n"
+    } else {
+        "GET /v1/models HTTP/1.1\r\n"
+    };
     let mut catalog_server = tokio::task::JoinSet::<()>::new();
     catalog_server.spawn(async move {
         loop {
@@ -50,7 +55,7 @@ async fn harness_reconciles_configuration_and_protects_sandbox_identity(harness:
             while !request.ends_with(b"\r\n\r\n") {
                 request.push(stream.read_u8().await.unwrap());
             }
-            assert!(request.starts_with(b"GET /v1/models HTTP/1.1\r\n"));
+            assert!(request.starts_with(request_line.as_bytes()));
             stream
                 .write_all(
                     b"HTTP/1.1 503 Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -88,6 +93,10 @@ async fn harness_reconciles_configuration_and_protects_sandbox_identity(harness:
     fixture.state.lock().unwrap().inference_exit = 1;
     deployment.apply(&document, &cancel).await.unwrap();
     assert!(
+        catalog_server.try_join_next().is_none(),
+        "model catalog fixture exited"
+    );
+    assert!(
         !fixture
             .state
             .lock()
@@ -112,7 +121,7 @@ async fn harness_reconciles_configuration_and_protects_sandbox_identity(harness:
             .iter()
             .filter(|command| {
                 command
-                    .get(2)
+                    .get(1)
                     .is_some_and(|arg| arg == "configure" || arg == "prepare")
             })
             .count()
@@ -264,9 +273,19 @@ async fn harness_reconciles_configuration_and_protects_sandbox_identity(harness:
         let configured = calls
             .iter()
             .rev()
-            .find(|command| command.get(2).is_some_and(|arg| arg == "configure"))
+            .find(|command| command.get(1).is_some_and(|arg| arg == "configure"))
             .unwrap();
-        let config: serde_json::Value = serde_json::from_str(&configured[4]).unwrap();
+        assert_eq!(configured[0], "fabric-agent");
+        assert!(configured.iter().any(|arg| arg == "--config"));
+        let config = fixture
+            .state
+            .lock()
+            .unwrap()
+            .fabric_configurations
+            .values()
+            .next()
+            .unwrap()
+            .clone();
         assert_eq!(config["schema_version"], "fabric.agent/v1alpha1");
         assert_eq!(config["harness"]["adapter_id"], harness);
         for role in ["primary", "default"] {
@@ -279,7 +298,7 @@ async fn harness_reconciles_configuration_and_protects_sandbox_identity(harness:
         assert!(
             !calls
                 .iter()
-                .any(|command| command.get(2).is_some_and(|arg| arg == "prepare"))
+                .any(|command| command.get(1).is_some_and(|arg| arg == "prepare"))
         );
         deployment.apply(&document, &cancel).await.unwrap();
     }
@@ -353,6 +372,10 @@ async fn harness_reconciles_configuration_and_protects_sandbox_identity(harness:
         fs::read(directory.path().join("terraform.tfstate")).unwrap(),
         state
     );
+    assert!(
+        catalog_server.try_join_next().is_none(),
+        "model catalog fixture exited"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -419,6 +442,15 @@ async fn failed_configuration_reports_safe_runtime_state_and_recovers_without_re
     let cancel = CancellationToken::new();
     deployment.apply(&document, &cancel).await.unwrap();
     let original = fixture.state.lock().unwrap().sandboxes.clone();
+    let sandbox_id = original
+        .values()
+        .next()
+        .unwrap()
+        .metadata
+        .as_ref()
+        .unwrap()
+        .id
+        .clone();
     let effects = fixture.state.lock().unwrap().effects;
     document.spec.sandboxes[0]
         .agent
@@ -440,12 +472,26 @@ async fn failed_configuration_reports_safe_runtime_state_and_recovers_without_re
     assert!(error.contains("sandbox/assistant"), "{error}");
     assert!(error.contains("agent runtime is unavailable"), "{error}");
     assert!(!error.contains("native-secret"), "{error}");
-    assert!(fixture.state.lock().unwrap().fabric_stopped);
+    assert!(
+        fixture
+            .state
+            .lock()
+            .unwrap()
+            .fabric_stopped
+            .contains(&sandbox_id)
+    );
     assert_eq!(fixture.state.lock().unwrap().sandboxes, original);
     assert_eq!(fixture.state.lock().unwrap().effects, effects);
     fixture.state.lock().unwrap().configuration_error = None;
     deployment.apply(&document, &cancel).await.unwrap();
-    assert!(!fixture.state.lock().unwrap().fabric_stopped);
+    assert!(
+        !fixture
+            .state
+            .lock()
+            .unwrap()
+            .fabric_stopped
+            .contains(&sandbox_id)
+    );
     assert_eq!(fixture.state.lock().unwrap().sandboxes, original);
     assert_eq!(fixture.state.lock().unwrap().effects, effects);
     assert_eq!(deployment.export(&cancel).await.unwrap(), document);

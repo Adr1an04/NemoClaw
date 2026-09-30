@@ -730,7 +730,7 @@ resource "nemoclaw_agent_configuration" "agent" {
             .iter()
             .filter(|command| {
                 command
-                    .get(2)
+                    .get(1)
                     .is_some_and(|arg| arg == "configure" || arg == "prepare")
             })
             .count()
@@ -752,7 +752,25 @@ resource "nemoclaw_agent_configuration" "agent" {
     assert_eq!(writes(), 2);
     assert_eq!(fixture.state.lock().unwrap().effects, effects);
     // A stopped host is observed as drift; explicit apply reconfigures it.
-    fixture.state.lock().unwrap().fabric_stopped = true;
+    let sandbox_id = fixture
+        .state
+        .lock()
+        .unwrap()
+        .sandboxes
+        .values()
+        .next()
+        .unwrap()
+        .metadata
+        .as_ref()
+        .unwrap()
+        .id
+        .clone();
+    fixture
+        .state
+        .lock()
+        .unwrap()
+        .fabric_stopped
+        .insert(sandbox_id.clone());
     tofu.run(
         &[
             "apply",
@@ -763,7 +781,14 @@ resource "nemoclaw_agent_configuration" "agent" {
         true,
     );
     assert_eq!(writes(), 3);
-    assert!(!fixture.state.lock().unwrap().fabric_stopped);
+    assert!(
+        !fixture
+            .state
+            .lock()
+            .unwrap()
+            .fabric_stopped
+            .contains(&sandbox_id)
+    );
     // Lose the exec response after the host accepted a configuration. Never
     // retry the mutation automatically; the next refresh observes the outcome.
     tofu.run(
@@ -775,10 +800,10 @@ resource "nemoclaw_agent_configuration" "agent" {
         ],
         true,
     );
-    fixture.state.lock().unwrap().exec_truncated = true;
+    fixture.state.lock().unwrap().lose_configure_reply = true;
     tofu.run(&["apply", "-input=false", "ambiguous.plan"], false);
     assert_eq!(writes(), 4);
-    fixture.state.lock().unwrap().exec_truncated = false;
+    assert!(!fixture.state.lock().unwrap().lose_configure_reply);
     tofu.run(
         &[
             "apply",
@@ -798,7 +823,7 @@ resource "nemoclaw_agent_configuration" "agent" {
     tofu.run(&["plan", "-input=false", "-var=model=second-model"], false);
     assert_eq!(tofu.state(), prior);
     assert_eq!(writes(), 4);
-    fixture.state.lock().unwrap().exec_truncated = false;
+    assert!(!fixture.state.lock().unwrap().lose_configure_reply);
     tofu.run(
         &[
             "apply",

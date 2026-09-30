@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "command": ["/opt/fabric/bin/python", "/opt/nemoclaw/fabric.py"],
+  "command": ["/usr/local/bin/fabric-agent"],
   "environment": {
     "ADAPTER_PYTHON": "/opt/fabric/bin/python",
     "HOME": "/sandbox",

@@ -393,8 +393,25 @@ mod tests {
     #[tokio::test]
     async fn selected_image_checks_fabric_plan_platform_and_missing_metadata_without_starting_containers()
      {
-        use nemoclaw_sdk::fabric_catalog::{FabricCatalog, IMAGE_CATALOG_LABEL};
+        use nemoclaw_sdk::fabric_catalog::{
+            BridgeCapabilities, FabricCatalog, IMAGE_CATALOG_LABEL,
+        };
         let mut catalog = FabricCatalog::bundled();
+        catalog.bridge = Some(BridgeCapabilities {
+            interface_version: 1,
+            operations: [
+                "validate",
+                "prepare",
+                "configure",
+                "check",
+                "invoke",
+                "serve",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect(),
+            health_checks: Vec::new(),
+        });
         catalog
             .adapters
             .retain(|adapter| adapter.adapter_id() == "nvidia.fabric.langchain.deepagents");

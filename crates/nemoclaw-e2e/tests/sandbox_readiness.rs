@@ -65,11 +65,16 @@ async fn standalone_sandbox_completion_rejects_unknown_health_and_retains_bindin
         .find(|row| row["address"] == "data.nemoclaw_sandbox_readiness.assistant")
         .unwrap();
     assert_eq!(health["values"]["ready"], false);
-    assert!(health["values"]["health_json"].is_null());
+    let failed_health: nemoclaw_sdk::RuntimeHealth =
+        serde_json::from_str(health["values"]["health_json"].as_str().unwrap()).unwrap();
+    assert!(failed_health.supported);
+    assert!(failed_health.report.is_none());
     assert_eq!(
-        health["values"]["error_message"],
-        "invalid Fabric health response; resources retained"
+        failed_health.reason_code.as_deref(),
+        Some("fabric_health_failed")
     );
+    assert!(!failed_health.allows_apply_completion());
+    assert!(health["values"]["error_message"].is_null());
     let token = health["values"]["read_trigger"]
         .as_str()
         .unwrap()
@@ -95,7 +100,10 @@ async fn standalone_sandbox_completion_rejects_unknown_health_and_retains_bindin
             .unwrap()
             .exec_calls
             .iter()
-            .all(|cmd| !cmd.iter().any(|part| part == "health"))
+            .all(|cmd| !cmd.iter().any(|part| matches!(
+                part.as_str(),
+                "--active" | "--ready" | "--operational" | "invoke"
+            )))
     );
     fixture.state.lock().unwrap().health_report = None;
     run(&["apply", "-input=false", "-no-color", "apply.plan"], true);
@@ -118,7 +126,8 @@ async fn standalone_sandbox_completion_rejects_unknown_health_and_retains_bindin
             .unwrap()
             .exec_calls
             .iter()
-            .any(|cmd| cmd.last().is_some_and(|part| part == "health"))
+            .any(|cmd| cmd.get(1).is_some_and(|part| part == "check")
+                && cmd.iter().any(|part| part == "--ready"))
     );
     let after: Value = serde_json::from_slice(&run(&["show", "-json"], true)).unwrap();
     let observation = after["values"]["root_module"]["resources"]

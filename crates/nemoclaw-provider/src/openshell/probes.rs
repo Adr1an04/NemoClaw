@@ -70,33 +70,34 @@ fn configuration_phase(status: proto::SandboxStatus) -> Result<i32, Error> {
     startup_phase(status)
 }
 
-fn configuration_failure(output: &[u8]) -> ObservationError {
-    let report: serde_json::Value = serde_json::from_slice(output).unwrap_or_default();
-    let error = &report["error"];
-    // Keep the bridge's vocabulary bounded again at the provider boundary.
-    // Older images and malformed reports retain an explicit unknown state.
-    let stage = match error["stage"].as_str() {
-        Some("validate") => "validate",
-        Some("start") => "start",
-        Some("stop") => "stop",
-        Some("invoke") => "invoke",
+fn configuration_failure(stage: &str, code: &str, runtime_state: Option<&str>) -> ObservationError {
+    // Only fixed public vocabulary crosses the diagnostic boundary.
+    let stage = match stage {
+        "validate" => "validate",
+        "start" => "start",
+        "stop" => "stop",
+        "invoke" => "invoke",
+        "generation" => "generation",
+        "request" => "request",
+        "transport" => "transport",
         _ => "unknown",
     };
-    let code = match error["code"].as_str() {
-        Some("pi_model_unknown") => "pi_model_unknown",
-        Some("pi_model_invalid") => "pi_model_invalid",
-        Some("lifecycle_adapter_start_failed") => "lifecycle_adapter_start_failed",
-        Some("lifecycle_adapter_stop_failed") => "lifecycle_adapter_stop_failed",
-        Some("lifecycle_adapter_invoke_failed") => "lifecycle_adapter_invoke_failed",
-        Some("fabric_validate_failed") => "fabric_validate_failed",
-        Some("fabric_start_failed") => "fabric_start_failed",
-        Some("fabric_stop_failed") => "fabric_stop_failed",
-        Some("fabric_invoke_failed") => "fabric_invoke_failed",
+    let code = match code {
+        "pi_model_unknown" => "pi_model_unknown",
+        "pi_model_invalid" => "pi_model_invalid",
+        "lifecycle_adapter_start_failed" => "lifecycle_adapter_start_failed",
+        "lifecycle_adapter_stop_failed" => "lifecycle_adapter_stop_failed",
+        "lifecycle_adapter_invoke_failed" => "lifecycle_adapter_invoke_failed",
+        "fabric_validate_failed" => "fabric_validate_failed",
+        "stale_generation" => "stale_generation",
+        "fabric_start_failed" => "fabric_start_failed",
+        "fabric_stop_failed" => "fabric_stop_failed",
+        "fabric_invoke_failed" => "fabric_invoke_failed",
         _ => "fabric_configuration_failed",
     };
-    let runtime_state = match error["runtime_state"].as_str() {
+    let runtime_state = match runtime_state {
         Some("running") => "running",
-        Some("unavailable") => "unavailable",
+        Some("stopped") => "unavailable",
         _ => "unknown",
     };
     ObservationError::FabricConfiguration {
@@ -156,9 +157,20 @@ impl OpenShell {
         environment: Row,
         seconds: u32,
     ) -> Result<(i32, Vec<u8>), Error> {
+        self.exec_input(binding, command, environment, seconds, Vec::new())
+            .await
+    }
+    pub(super) async fn exec_input(
+        &self,
+        binding: &Row,
+        command: Vec<String>,
+        environment: Row,
+        seconds: u32,
+        stdin: Vec<u8>,
+    ) -> Result<(i32, Vec<u8>), Error> {
         tokio::time::timeout(
             Duration::from_secs(u64::from(seconds)),
-            self.exec_stream(binding, command, environment, seconds),
+            self.exec_stream(binding, command, environment, seconds, stdin),
         )
         .await
         .map_err(|_| Error::Conflict("sandbox exec timed out; invocation may have had effects"))?
@@ -169,6 +181,7 @@ impl OpenShell {
         command: Vec<String>,
         environment: Row,
         seconds: u32,
+        stdin: Vec<u8>,
     ) -> Result<(i32, Vec<u8>), Error> {
         // Exec is name-addressed upstream; verify the retained identity immediately
         // before sending and never retry an ambiguous invocation.
@@ -177,6 +190,8 @@ impl OpenShell {
             sandbox: sandbox.metadata.ok_or(ObservationError::Incomplete)?.name,
             workspace_scope: Some(proto::workspace_selector(value(binding, "workspace"))),
             command,
+            stdin,
+            no_login_shell: true,
             environment: environment.into_iter().collect(),
             execution_timeout: Some(
                 openshell_core::time::duration_from_std(Duration::from_secs(u64::from(seconds)))
@@ -204,7 +219,7 @@ impl OpenShell {
             }
             match event.payload.ok_or(ObservationError::Incomplete)? {
                 proto::exec_sandbox_event::Payload::Stdout(chunk) => {
-                    if output.len() + chunk.data.len() > 1 << 20 {
+                    if output.len() + chunk.data.len() > protocol::RESPONSE_LIMIT {
                         return Err(Error::Conflict("sandbox exec output exceeds limit"));
                     }
                     output.extend(chunk.data);
@@ -215,20 +230,8 @@ impl OpenShell {
         }
         Ok((exit.ok_or(ObservationError::Incomplete)?, output))
     }
-    fn configuration_command(&self, binding: &Row) -> Result<(Vec<String>, Row), Error> {
-        if value(binding, "agent_runtime") != "fabric" {
-            return Err(Error::Conflict("unsupported sandbox runtime"));
-        }
-        let config = value(binding, "config_json");
-        serde_json::from_str::<nemo_fabric_core::FabricConfig>(config)
-            .map_err(|_| ObservationError::Query)?;
-        Ok((
-            agent::fabric_command(&["check", value(binding, "agent_name"), config]),
-            Row::new(),
-        ))
-    }
     pub async fn configure_agent(&self, binding: &Row, prepare: bool) -> Result<(), Error> {
-        tokio::time::timeout(Duration::from_secs(120), async {
+        let generation = tokio::time::timeout(Duration::from_secs(120), async {
             loop {
                 let phase = configuration_phase(
                     self.bound_sandbox(binding)
@@ -236,26 +239,57 @@ impl OpenShell {
                         .status
                         .ok_or(ObservationError::Incomplete)?,
                 )?;
-                if phase == proto::SandboxPhase::Ready as i32 {
-                    return Ok::<(), Error>(());
+                if phase == proto::SandboxPhase::Ready as i32
+                    && let Some(generation) = self.agent_snapshot(binding).await?.generation
+                {
+                    return Ok::<_, Error>(generation);
                 }
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
         })
         .await
         .map_err(|_| Error::Conflict("Fabric sandbox startup timed out; resources retained"))??;
-        let (mut command, environment) = self.configuration_command(binding)?;
-        command[2] = if prepare { "prepare" } else { "configure" }.into();
-        let (exit, output) = self.exec_bound(binding, command, environment, 120).await?;
-        if exit != 0 {
-            return Err(configuration_failure(&output).into());
+        let config: serde_json::Value = serde_json::from_str(value(binding, "config_json"))
+            .map_err(|_| ObservationError::Query)?;
+        let operation = if prepare { "prepare" } else { "configure" };
+        let response = self
+            .bridge_file(binding, operation, &config, Some(&generation))
+            .await?;
+        if response.status != "succeeded" {
+            let failure = response
+                .error
+                .as_ref()
+                .ok_or(ObservationError::Incomplete)?;
+            return Err(configuration_failure(
+                &failure.stage,
+                &failure.code,
+                response
+                    .result
+                    .as_ref()
+                    .and_then(|result| result["runtime_state"].as_str()),
+            )
+            .into());
+        }
+        let result = response
+            .result
+            .as_ref()
+            .ok_or(ObservationError::Incomplete)?;
+        if result["generation"].as_str().is_none_or(str::is_empty)
+            || (prepare && (result["prepared"] != true || result["runtime_state"] != "stopped"))
+            || (!prepare
+                && (result["runtime_state"] != "running"
+                    || result["runtime_id"].as_str().is_none_or(str::is_empty)))
+        {
+            return Err(ObservationError::Incomplete.into());
         }
         Ok(())
     }
     pub async fn configuration(&self, binding: &Row) -> Result<(), Error> {
-        let (command, environment) = self.configuration_command(binding)?;
-        let (exit, _) = self.exec_bound(binding, command, environment, 20).await?;
-        if exit != 0 {
+        let snapshot = self.agent_snapshot(binding).await?;
+        let desired: serde_json::Value = serde_json::from_str(value(binding, "config_json"))
+            .map_err(|_| ObservationError::Query)?;
+        if snapshot.runtime_state != "running" || snapshot.applied_config.as_ref() != Some(&desired)
+        {
             return Err(Error::Conflict(
                 "agent configuration cannot be independently established",
             ));
@@ -268,11 +302,10 @@ impl OpenShell {
                 let sandbox = self.bound_sandbox(binding).await?;
                 let phase =
                     configuration_phase(sandbox.status.ok_or(ObservationError::Incomplete)?)?;
-                if phase == proto::SandboxPhase::Ready as i32 {
-                    let (command, environment) = self.configuration_command(binding)?;
-                    if let Ok((0, _)) = self.exec_bound(binding, command, environment, 20).await {
-                        return Ok(());
-                    }
+                if phase == proto::SandboxPhase::Ready as i32
+                    && self.configuration(binding).await.is_ok()
+                {
+                    return Ok(());
                 }
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
@@ -290,15 +323,18 @@ impl OpenShell {
         binding: &Row,
         agent: Option<&str>,
     ) -> Result<nemoclaw_sdk::RuntimeHealth, Error> {
-        let mut command = agent::fabric_command(&["health"]);
-        command.extend(agent.map(String::from));
-        let (exit, output) = self.exec_bound(binding, command, Row::new(), 10).await?;
-        if exit != 0 {
-            return Err(Error::Conflict(
-                "Fabric health bridge unavailable; rebuild the agent image; resources retained",
-            ));
-        }
-        nemoclaw_sdk::RuntimeHealth::decode(&output)
+        self.bridge(
+            binding,
+            &[
+                "check",
+                "--agent",
+                agent.unwrap_or_else(|| value(binding, "agent_name")),
+                "--ready",
+            ],
+            10,
+        )
+        .await?
+        .health()
     }
 
     pub async fn inference_ready(&self, _binding: &Row) -> Result<(), Error> {
@@ -317,21 +353,28 @@ impl OpenShell {
 mod tests {
     #[test]
     fn configuration_diagnostics_preserve_only_known_fields() {
-        let failure = super::configuration_failure(br#"{"error":{"stage":"start","code":"lifecycle_adapter_start_failed","runtime_state":"unavailable","message":"private-value"}}"#);
+        let failure = super::configuration_failure(
+            "start",
+            "lifecycle_adapter_start_failed",
+            Some("stopped"),
+        );
         let text = failure.to_string();
         assert!(text.contains("lifecycle_adapter_start_failed"));
         assert!(text.contains("agent runtime is unavailable"));
         assert!(!text.contains("private-value"));
-        for output in [b"".as_slice(), b"private-value", br#"{"error":{"stage":"private-value","code":"private-value","runtime_state":"private-value"}}"#] {
-            assert_eq!(super::configuration_failure(output), nemoclaw_sdk::ObservationError::FabricConfiguration {
-                stage: "unknown", code: "fabric_configuration_failed", runtime_state: "unknown",
-            });
-        }
+        assert_eq!(
+            super::configuration_failure("private-value", "private-value", Some("private-value")),
+            nemoclaw_sdk::ObservationError::FabricConfiguration {
+                stage: "unknown",
+                code: "fabric_configuration_failed",
+                runtime_state: "unknown",
+            }
+        );
     }
 
     #[test]
     fn pi_model_failure_keeps_the_code_and_named_sandbox_without_native_details() {
-        let error = super::configuration_failure(br#"{"error":{"stage":"start","code":"pi_model_unknown","runtime_state":"unavailable","message":"PRIVATE_SENTINEL"}}"#);
+        let error = super::configuration_failure("start", "pi_model_unknown", Some("stopped"));
         let message = crate::resource::observation_message(error, Some("coder"));
         for expected in [
             "sandbox/coder",

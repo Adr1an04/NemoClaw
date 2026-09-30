@@ -1,14 +1,23 @@
 --- a/crates/fabric-python/src/lib.rs
 +++ b/crates/fabric-python/src/lib.rs
-@@ -250,7 +250,15 @@
+@@ -250,7 +250,24 @@
  }
 
  fn to_py_error(error: nemo_fabric_core::FabricError) -> PyErr {
 -    PyRuntimeError::new_err(error.to_string())
 +    Python::attach(|py| {
 +        let exception = PyRuntimeError::new_err(error.to_string());
-+        if let nemo_fabric_core::FabricError::AdapterLifecycleOperation { code, .. } = &error
-+            && let Err(failure) = exception.value(py).setattr("code", code.as_str())
++        let code = match &error {
++            nemo_fabric_core::FabricError::AdapterLifecycleOperation { code, .. } => {
++                Some(code.as_str())
++            }
++            nemo_fabric_core::FabricError::UnverifiedAdapterCapability { .. } => {
++                Some("adapter_capability_unverified")
++            }
++            _ => None,
++        };
++        if let Some(code) = code
++            && let Err(failure) = exception.value(py).setattr("code", code)
 +        {
 +            return failure;
 +        }
@@ -17,7 +26,7 @@
  }
 
  fn resolve_context(
-@@ -377,6 +385,30 @@
+@@ -377,6 +394,53 @@
      use super::query_python_data_path_with_timeout;
 
      #[test]
@@ -45,12 +54,46 @@
 +    }
 +
 +    #[test]
++    fn unverified_capability_keeps_its_kind_on_the_python_exception() {
++        use pyo3::prelude::*;
++        Python::initialize();
++        let error =
++            super::to_py_error(nemo_fabric_core::FabricError::UnverifiedAdapterCapability {
++                adapter_id: "fixture".into(),
++                field: "harness.settings".into(),
++                reason: "PRIVATE_SENTINEL".into(),
++            });
++        Python::attach(|py| {
++            assert_eq!(
++                error
++                    .value(py)
++                    .getattr("code")
++                    .unwrap()
++                    .extract::<String>()
++                    .unwrap(),
++                "adapter_capability_unverified"
++            );
++        });
++    }
++
++    #[test]
      fn python_data_path_query_times_out() {
          let unique = SystemTime::now()
              .duration_since(SystemTime::UNIX_EPOCH)
 --- a/sdk/python/nemo-fabric-runtime/src/nemo_fabric/client.py
 +++ b/sdk/python/nemo-fabric-runtime/src/nemo_fabric/client.py
-@@ -407,7 +407,9 @@
+@@ -177,7 +177,9 @@
+         except FabricError:
+             raise
+         except Exception as error:
+-            raise FabricConfigError(str(error)) from error
++            raise FabricConfigError(
++                str(error), code=getattr(error, "code", None)
++            ) from error
+
+     async def doctor(
+         self,
+@@ -407,7 +409,9 @@
              raise
          except Exception as error:
              await close_streaming_resources()

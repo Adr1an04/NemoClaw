@@ -4,8 +4,8 @@ use nemoclaw_provider::openshell::{command, environment, policy, policy_matches}
 
 #[test]
 fn fabric_launch_preserves_caller_identity_without_selecting_or_invoking_an_adapter() {
-    let launch = command("fabric");
-    assert_eq!(launch.last().map(String::as_str), Some("serve"));
+    let launch = command("fabric", "researcher");
+    assert_eq!(launch, ["fabric-agent", "serve", "--agent", "researcher"]);
     assert!(
         !launch
             .iter()
@@ -21,7 +21,7 @@ fn fabric_launch_preserves_caller_identity_without_selecting_or_invoking_an_adap
         assert!(!env.contains_key("NEMOCLAW_FABRIC_HARNESS"));
         assert!(!env.contains_key("MSWEA_COST_TRACKING"));
     }
-    assert!(command("").is_empty());
+    assert!(command("", "main").is_empty());
     assert!(environment("main", "").is_empty());
 }
 

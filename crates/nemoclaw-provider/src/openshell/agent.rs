@@ -5,16 +5,16 @@ use nemoclaw_sdk::backend::Row;
 
 /// Fixed bridge interface packaged by image/fabric/Dockerfile.
 pub(super) fn fabric_command(arguments: &[&str]) -> Vec<String> {
-    ["/opt/fabric/bin/python", "/opt/nemoclaw/fabric.py"]
+    ["fabric-agent"]
         .into_iter()
         .chain(arguments.iter().copied())
         .map(String::from)
         .collect()
 }
 
-pub fn command(runtime: &str) -> Vec<String> {
+pub fn command(runtime: &str, name: &str) -> Vec<String> {
     if runtime == "fabric" {
-        fabric_command(&["serve"])
+        fabric_command(&["serve", "--agent", name])
     } else {
         Vec::new()
     }
@@ -51,9 +51,9 @@ mod tests {
         assert!(!env.contains_key("NEMOCLAW_FABRIC_HARNESS"));
         assert!(!env.contains_key("NEMOCLAW_FABRIC_ADAPTER_ID"));
         assert_eq!(
-            command("fabric"),
-            ["/opt/fabric/bin/python", "/opt/nemoclaw/fabric.py", "serve"]
+            command("fabric", "main"),
+            ["fabric-agent", "serve", "--agent", "main"]
         );
-        assert!(command("fabric-pi").is_empty());
+        assert!(command("fabric-pi", "main").is_empty());
     }
 }

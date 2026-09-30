@@ -622,9 +622,43 @@ async fn public_configuration_refresh_verifies_runtime_intent_without_mutation()
         .values
         .clone();
     desired.insert("sandbox_id".into(), rows[3]["id"].clone());
+    fixture.state.lock().unwrap().host_unavailable_checks = 1;
     let configured = client.ensure("agent_configuration", &desired).await;
     assert!(configured.error().is_none(), "{:?}", configured.error());
     let binding = configured.into_parts().0.unwrap();
+    {
+        let state = fixture.state.lock().unwrap();
+        assert!(
+            state.staged_files.is_empty(),
+            "staged config must be removed"
+        );
+        assert_eq!(
+            state
+                .exec_calls
+                .iter()
+                .filter(|args| args.get(1).is_some_and(|arg| arg == "configure"))
+                .count(),
+            1,
+            "only passive observation may be retried during host startup"
+        );
+        let command = state
+            .exec_calls
+            .iter()
+            .find(|args| args.get(1).is_some_and(|arg| arg == "configure"))
+            .unwrap();
+        assert_eq!(
+            &command[..4],
+            ["fabric-agent", "configure", "--agent", "main"]
+        );
+        assert_eq!(command[4], "--config");
+        assert!(command[5].starts_with("/sandbox/.nemoclaw-"));
+        assert_eq!(command[6], "--expected-generation");
+        assert_eq!(command[7], "fixture:0");
+        assert!(!command.iter().any(|arg| arg.contains("schema_version")));
+    }
+    fixture.state.lock().unwrap().health_report = Some(
+        serde_json::json!({"supported":false,"report":null,"reason_code":"fabric_health_unsupported"}),
+    );
     let effects = fixture.state.lock().unwrap().effects;
     let writes = fixture
         .state
@@ -632,7 +666,7 @@ async fn public_configuration_refresh_verifies_runtime_intent_without_mutation()
         .unwrap()
         .exec_calls
         .iter()
-        .filter(|command| command.get(2).is_some_and(|arg| arg == "configure"))
+        .filter(|command| command.get(1).is_some_and(|arg| arg == "configure"))
         .count();
     client
         .read("agent_configuration", &binding, false)
@@ -646,7 +680,7 @@ async fn public_configuration_refresh_verifies_runtime_intent_without_mutation()
             state
                 .exec_calls
                 .iter()
-                .filter(|command| command.get(2).is_some_and(|arg| arg == "configure"))
+                .filter(|command| command.get(1).is_some_and(|arg| arg == "configure"))
                 .count(),
             writes
         );
@@ -654,7 +688,7 @@ async fn public_configuration_refresh_verifies_runtime_intent_without_mutation()
             state
                 .exec_calls
                 .iter()
-                .any(|command| command.get(2).is_some_and(|arg| arg == "check"))
+                .any(|command| command.get(1).is_some_and(|arg| arg == "check"))
         );
     }
     fixture.state.lock().unwrap().exec_exit = 2;

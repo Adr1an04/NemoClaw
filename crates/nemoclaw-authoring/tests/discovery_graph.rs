@@ -8,7 +8,7 @@ use nemoclaw_authoring::{
 use nemoclaw_sdk::{
     config::{ComputeDriver, HarnessKind},
     discovery::{EngineObservation, FabricObservation, ObservationStatus},
-    fabric_catalog::FabricCatalog,
+    fabric_catalog::{BridgeCapabilities, FabricCatalog},
 };
 
 fn draft() -> Draft {
@@ -20,6 +20,22 @@ fn draft() -> Draft {
 }
 
 fn evidence(draft: &Draft) -> DiscoveryEvidence {
+    let mut catalog = FabricCatalog::bundled();
+    catalog.bridge = Some(BridgeCapabilities {
+        interface_version: 1,
+        operations: [
+            "validate",
+            "prepare",
+            "configure",
+            "check",
+            "invoke",
+            "serve",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect(),
+        health_checks: Vec::new(),
+    });
     DiscoveryEvidence {
         key: draft.discovery_key().unwrap(),
         engine: Some(EngineObservation {
@@ -37,7 +53,7 @@ fn evidence(draft: &Draft) -> DiscoveryEvidence {
             reason: None,
             source: "engine_image_inspect".into(),
             image_id: Some("sha256:observed".into()),
-            catalog: Some(FabricCatalog::bundled()),
+            catalog: Some(catalog),
             image: nemoclaw_sdk::fabric_capabilities::ImageMetadata {
                 architecture: Some("arm64".into()),
                 operating_system: Some("linux".into()),

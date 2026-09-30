@@ -15,6 +15,11 @@ from nemo_fabric import DiscoveryConfig, Fabric
 
 
 class CatalogContract(unittest.TestCase):
+    def test_bundled_descriptors_do_not_claim_an_installed_bridge(self):
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = snapshot("a" * 40, "b" * 64, runtime_files=Path(directory, "absent.json"))
+        self.assertNotIn("bridge", catalog)
+
     def snapshot_with_runtime_files(self, declared):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory, "runtime-files.json")
@@ -82,13 +87,29 @@ class CatalogContract(unittest.TestCase):
             from copy import deepcopy
 
             owner_records = deepcopy(records)
+            owner_records[0]["provenance"] = [{"source": "installed_package"}]
             owner_records[0]["descriptor"].setdefault("requirements", {})["binaries"] = ["bun"]
             with patch("catalog.Fabric") as fabric:
                 fabric.return_value.discover.return_value = [
-                    type("Record", (), {"to_mapping": lambda self: owner_records[0]})()
+                    type(
+                        "Record",
+                        (),
+                        {
+                            "to_mapping": lambda self: owner_records[0],
+                            "provenance": owner_records[0]["provenance"],
+                        },
+                    )()
                 ]
                 fabric.return_value.discover_targets.return_value = []
-                catalog = snapshot("a" * 40, "b" * 64, runtime_manifest=path)
+                catalog = snapshot("a" * 40, "b" * 64, installed_only=True, runtime_manifest=path)
+            self.assertEqual(
+                catalog["bridge"],
+                {
+                    "interface_version": 1,
+                    "operations": ["validate", "prepare", "configure", "check", "invoke", "serve"],
+                    "health_checks": [],
+                },
+            )
             self.assertEqual(catalog["runtime"]["command"], layout["command"])
             self.assertEqual(catalog["runtime"]["policy"], layout["policy"])
             self.assertEqual(catalog["runtime"]["environment"], layout["environment"])

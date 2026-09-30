@@ -603,7 +603,11 @@ async fn lifecycle_with_rejected_annotations(input: &str, reject_annotations: bo
     );
     let health = applied.unwrap().health;
     assert_eq!(health.len(), document.spec.sandboxes.len());
-    assert!(health.iter().all(|entry| !entry.health.supported));
+    assert!(
+        health
+            .iter()
+            .all(|entry| entry.health.allows_apply_completion())
+    );
     for operation in [
         "bundle.verify",
         "tofu.init",
@@ -650,7 +654,8 @@ async fn lifecycle_with_rejected_annotations(input: &str, reject_annotations: bo
             "{diagnostic}"
         );
         assert!(
-            diagnostic.contains("/$defs/InferenceProvider/additionalProperties"),
+            diagnostic.contains("spec.inferenceProviders[0]")
+                && diagnostic.contains("unknown fields are not allowed"),
             "{diagnostic}"
         );
         assert_eq!(fs::read(intent_path).unwrap(), before_intent);
@@ -805,13 +810,14 @@ async fn lifecycle_with_rejected_annotations(input: &str, reject_annotations: bo
                 .iter()
                 .any(|command| {
                     command
-                        .get(2)
-                        .is_some_and(|operation| operation == "configure")
+                        .first()
+                        .is_some_and(|entrypoint| entrypoint == "fabric-agent")
                         && command
-                            .get(4)
-                            .and_then(|value| serde_json::from_str::<serde_json::Value>(value).ok())
-                            .as_ref()
-                            == Some(&original)
+                            .get(1)
+                            .is_some_and(|operation| operation == "configure")
+                        && command.windows(2).any(|args| {
+                            args[0] == "--config" && args[1].starts_with("/sandbox/.nemoclaw-")
+                        })
                 })
         );
         // Native settings belong to the owned Fabric configuration. Refresh must
@@ -1206,7 +1212,10 @@ async fn apply_health_failure_retains_resources_and_unchanged_apply_checks_again
     assert!(
         fixture.state.lock().unwrap().exec_calls[calls..]
             .iter()
-            .all(|cmd| cmd.last().unwrap() != "health")
+            .all(|cmd| !cmd.iter().any(|part| matches!(
+                part.as_str(),
+                "--active" | "--ready" | "--operational" | "invoke"
+            )))
     );
     assert!(deployment.apply(&document, &cancel).await.is_err());
     assert_same_deployment_state(
@@ -1241,25 +1250,23 @@ async fn apply_health_failure_retains_resources_and_unchanged_apply_checks_again
     fixture.state.lock().unwrap().health_report = None;
     let result = deployment.apply(&document, &cancel).await.unwrap();
     assert!(result.changes.is_empty());
-    assert!(!result.health[0].health.supported);
+    assert!(result.health[0].health.allows_apply_completion());
     assert_eq!(fixture.state.lock().unwrap().effects, effects);
     let record: serde_json::Value =
         serde_json::from_slice(&fs::read(directory.path().join("intent.json")).unwrap()).unwrap();
     assert_eq!(record["succeeded"], true);
+    let native_report =
+        serde_json::json!({"fixture_check":{"outcome":"failed","reason":"fixture_probe_failed"}});
     fixture.state.lock().unwrap().health_report = Some(serde_json::json!({
-        "supported": true, "reason_code": null, "report": {
-            "runtime_id": "owned", "checked_at_millis": 100, "duration_millis": 2,
-            "liveness": "responsive", "activity": "busy", "readiness": "ready",
-            "reason_code": "accepting_work", "checks": []
-        }
+        "supported": true, "reason_code": "fixture_probe_failed", "report": native_report
     }));
-    let before_unsupported_report = fs::read(directory.path().join("terraform.tfstate")).unwrap();
+    let before_failed_report = fs::read(directory.path().join("terraform.tfstate")).unwrap();
     assert!(matches!(
         deployment.apply(&document, &cancel).await.unwrap_err(),
         nemoclaw_sdk::Error::Execution { .. }
     ));
     let rejected = fs::read(directory.path().join("terraform.tfstate")).unwrap();
-    assert_same_managed_resources(&rejected, &before_unsupported_report);
+    assert_same_managed_resources(&rejected, &before_failed_report);
     let rejected: serde_json::Value = serde_json::from_slice(&rejected).unwrap();
     let readiness = rejected["resources"]
         .as_array()
@@ -1269,11 +1276,15 @@ async fn apply_health_failure_retains_resources_and_unchanged_apply_checks_again
         .unwrap();
     let observation = &readiness["instances"][0]["attributes"];
     assert_eq!(observation["ready"], false);
-    assert!(observation["health_json"].is_null());
+    let reported: nemoclaw_sdk::RuntimeHealth =
+        serde_json::from_str(observation["health_json"].as_str().unwrap()).unwrap();
+    assert_eq!(reported.report, Some(native_report));
     assert_eq!(
-        observation["error_message"],
-        "invalid Fabric health response; resources retained"
+        reported.reason_code.as_deref(),
+        Some("fabric_health_failed")
     );
+    assert!(!reported.allows_apply_completion());
+    assert!(observation["error_message"].is_null());
     let state = fixture.state.lock().unwrap();
     assert_eq!(state.effects, effects);
     assert_eq!(state.delete_calls, 0);
@@ -2053,7 +2064,25 @@ async fn scoped_provider_labels_and_stopped_runtime_plans_preserve_authored_iden
     assert_eq!(fixture.state.lock().unwrap().effects, 0);
     deployment.apply(&document, &cancel).await.unwrap();
     let effects = fixture.state.lock().unwrap().effects;
-    fixture.state.lock().unwrap().fabric_stopped = true;
+    let sandbox_id = fixture
+        .state
+        .lock()
+        .unwrap()
+        .sandboxes
+        .values()
+        .next()
+        .unwrap()
+        .metadata
+        .as_ref()
+        .unwrap()
+        .id
+        .clone();
+    fixture
+        .state
+        .lock()
+        .unwrap()
+        .fabric_stopped
+        .insert(sandbox_id.clone());
     for format in ["text", "json"] {
         let output = Command::new(
             bundle
@@ -2093,11 +2122,25 @@ async fn scoped_provider_labels_and_stopped_runtime_plans_preserve_authored_iden
             assert_eq!(resource["agentRunning"], false);
             assert_eq!(resource["plannedActions"], serde_json::json!(["update"]));
         }
-        assert!(fixture.state.lock().unwrap().fabric_stopped);
+        assert!(
+            fixture
+                .state
+                .lock()
+                .unwrap()
+                .fabric_stopped
+                .contains(&sandbox_id)
+        );
         assert_eq!(fixture.state.lock().unwrap().effects, effects);
     }
     let repaired = deployment.apply(&document, &cancel).await.unwrap();
     assert_eq!(repaired.changes.len(), 1);
-    assert!(!fixture.state.lock().unwrap().fabric_stopped);
+    assert!(
+        !fixture
+            .state
+            .lock()
+            .unwrap()
+            .fabric_stopped
+            .contains(&sandbox_id)
+    );
     deployment.destroy(&cancel).await.unwrap();
 }
