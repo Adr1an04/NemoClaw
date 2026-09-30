@@ -85,11 +85,17 @@ For an external Ollama digest mismatch, use [the proxy guide](inference.md#use-e
 | Dashboard cannot connect | Native service, forwarding, authentication, or browser pairing may be incomplete | Follow [interface diagnosis](interfaces.md#diagnose-failures); keep local forwarding ports consistent |
 | Managed runtime stopped after a protection trip | The independent supervisor stopped inference | Inspect [retained status and logs](models.md#diagnose-and-recover-a-stopped-runtime) and correct capacity/startup conditions before explicit recovery |
 
-Terminal sandbox errors report the OpenShell phase, a recognized failure reason, and the main process exit code, or `unknown` when unavailable.
-Recognized reasons are `ControlSupervisorExited` and `ContainerExited`; other backend reasons appear as `unknown`.
+Terminal sandbox apply errors name the sandbox and report the OpenShell phase, a recognized failure reason, and the main process exit code, or `unknown` when unavailable.
+Recognized reasons are `ControlSupervisorExited`, `ContainerExited`, `IdentityResolutionFailed`, and `ControlSupervisorStartFailed`; other backend reasons appear as `unknown`.
+`IdentityResolutionFailed` means the workload user or group could not be resolved in the pinned image; check the explicit policy's `process.run_as_user` and `process.run_as_group`.
+`ControlSupervisorStartFailed` means the control supervisor could not start; inspect the sandbox policy and attached providers.
+These explanations are fixed text, not the gateway's condition message.
 Error, completed, stopped, and deleting phases fail immediately and retain resources.
 The SDK excludes unrecognized reasons and raw backend condition messages because they may contain credentials.
-The CLI points to OpenShell inspection and log collection; use the procedure below before cleanup.
+Use the OpenShell inspection and log collection procedure below before cleanup.
+If startup requires a different image or policy, follow the [sandbox change procedure](usage.md#choose-the-change-path); ordinary apply protects the existing sandbox from replacement.
+A failed first apply can be [destroyed](usage.md#destroy) with its retained state before a successful reapply.
+The [startup diagnostic qualification](validation/sandbox-startup-linux-arm64.md) records the live missing-user reproduction and fixture coverage.
 The [current main-process environment blocker](validation/rust-native-inference-linux-arm64.md#live-attempt-and-blocker) can stop startup before native log files exist.
 
 The current CLI has no `doctor`, `status`, or diagnostic-bundle command.

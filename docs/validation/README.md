@@ -28,6 +28,7 @@ The subsequent [managed Podman qualification](rust-managed-podman-linux-arm64.md
 
 | Behavior | Tests and Results |
 |---|---|
+| Named OpenShell startup reasons, safe explanations, and failed-first-apply teardown | [Linux ARM64 sandbox startup qualification](sandbox-startup-linux-arm64.md) |
 | Fabric runtime error codes, named sandbox failures, and retained-state recovery | [Linux ARM64 runtime failure qualification](fabric-runtime-failure-linux-arm64.md) |
 | Named Fabric compatibility rejections, safe field details, and Pi model-token overrides | [Linux ARM64 compatibility diagnostics](fabric-compatibility-linux-arm64.md) |
 | Managed Docker gateway exit diagnostics, bounded readiness, and recovery | [Linux ARM64 gateway startup qualification](gateway-startup-linux-arm64.md) |
