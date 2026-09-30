@@ -389,6 +389,41 @@ mod tests {
     }
 
     #[test]
+    fn startup_failures_name_the_sandbox_and_explain_known_reasons_without_backend_text() {
+        for (reason, guidance) in [
+            (
+                "IdentityResolutionFailed",
+                "check policy.process.run_as_user and run_as_group",
+            ),
+            (
+                "ControlSupervisorStartFailed",
+                "check the sandbox policy and attached providers",
+            ),
+        ] {
+            let failure = startup_phase(proto::SandboxStatus {
+                phase: proto::SandboxPhase::Error as i32,
+                conditions: vec![proto::SandboxCondition {
+                    r#type: "Ready".into(),
+                    status: "False".into(),
+                    reason: reason.into(),
+                    message: "PRIVATE_SENTINEL".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })
+            .unwrap_err();
+            let direct = failure.to_string();
+            let observation = failure.into_observation();
+            assert_eq!(direct, observation.to_string());
+            let message = crate::resource::observation_message(observation, Some("coder"));
+            for expected in ["sandbox/coder", reason, guidance, "resources retained"] {
+                assert!(message.contains(expected), "{message}");
+            }
+            assert!(!message.contains("PRIVATE_SENTINEL"));
+        }
+    }
+
+    #[test]
     fn terminal_sandbox_reports_known_failure_without_backend_text() {
         for (kind, status, reason, expected) in [
             (

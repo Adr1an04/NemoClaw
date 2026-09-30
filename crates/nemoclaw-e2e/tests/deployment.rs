@@ -1891,3 +1891,102 @@ async fn pi_start_failure_names_the_sandbox_in_cli_text_and_json_and_allows_dest
         assert!(fixture.state.lock().unwrap().sandboxes.is_empty());
     }
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires explicit verified NEMOCLAW_TEST_BUNDLE; isolated gateway fixture"]
+async fn sandbox_startup_failure_names_reason_and_guidance_and_allows_destroy() {
+    let bundle = PathBuf::from(std::env::var_os("NEMOCLAW_TEST_BUNDLE").unwrap());
+    for (format, reason, guidance) in [
+        (
+            "text",
+            "IdentityResolutionFailed",
+            "check policy.process.run_as_user and run_as_group",
+        ),
+        (
+            "json",
+            "ControlSupervisorStartFailed",
+            "check the sandbox policy and attached providers",
+        ),
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        let fixture = Fixture::start().await;
+        let mut input: serde_json::Value = serde_saphyr::from_str(include_str!(
+            "../../nemoclaw-sdk/tests/fixtures/config/local.yaml"
+        ))
+        .unwrap();
+        input["spec"]["gateway"]["endpoint"] = fixture.endpoint.clone().into();
+        input["spec"]["sandboxes"][0]["name"] = "coder".into();
+        let document = Document::parse(input.to_string().as_bytes()).unwrap();
+        let input = directory.path().join("input.yaml");
+        fs::write(&input, document.yaml().unwrap()).unwrap();
+        let state = directory.path().join("state");
+        {
+            let mut fixture_state = fixture.state.lock().unwrap();
+            fixture_state.sandbox_phase = Some(openshell_core::proto::SandboxPhase::Error);
+            fixture_state.sandbox_conditions = vec![openshell_core::proto::SandboxCondition {
+                r#type: "Ready".into(),
+                status: "False".into(),
+                reason: reason.into(),
+                message: "PRIVATE_SENTINEL".into(),
+                ..Default::default()
+            }];
+        }
+        let invoke = |operation: &str| {
+            let mut command = Command::new(
+                bundle
+                    .join("bin")
+                    .join(nemoclaw_sdk::bundle::executable("nemoclaw")),
+            );
+            command
+                .arg("--bundle")
+                .arg(&bundle)
+                .arg("--state-dir")
+                .arg(&state)
+                .args(["--progress", "off", operation, "-o", format]);
+            if matches!(operation, "apply" | "plan") {
+                command.arg(&input);
+            }
+            if operation == "apply" {
+                command.arg("--non-interactive");
+            }
+            command.output().unwrap()
+        };
+        for operation in ["apply", "plan"] {
+            let before = fixture.state.lock().unwrap().effects;
+            let failed = invoke(operation);
+            assert_eq!(failed.status.code(), Some(1));
+            let stdout = String::from_utf8(failed.stdout).unwrap();
+            let stderr = String::from_utf8(failed.stderr).unwrap();
+            let message = if format == "json" {
+                let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+                assert_eq!(report["outcome"], "failed");
+                report["error"]["message"].as_str().unwrap().to_owned()
+            } else {
+                stderr.clone()
+            };
+            for expected in [
+                "sandbox/coder",
+                "SANDBOX_PHASE_ERROR",
+                reason,
+                guidance,
+                "resources retained",
+            ] {
+                assert!(message.contains(expected), "{message}");
+            }
+            assert!(!stdout.contains("PRIVATE_SENTINEL") && !stderr.contains("PRIVATE_SENTINEL"));
+            assert_eq!(fixture.state.lock().unwrap().sandboxes.len(), 1);
+            assert!(state.join("terraform.tfstate").exists());
+            if operation == "plan" {
+                assert_eq!(fixture.state.lock().unwrap().effects, before);
+            }
+        }
+        let destroyed = invoke("destroy");
+        assert!(
+            destroyed.status.success(),
+            "{} {}",
+            String::from_utf8_lossy(&destroyed.stdout),
+            String::from_utf8_lossy(&destroyed.stderr)
+        );
+        assert!(fixture.state.lock().unwrap().sandboxes.is_empty());
+    }
+}

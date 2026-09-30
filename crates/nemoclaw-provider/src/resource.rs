@@ -17,6 +17,7 @@ pub(crate) fn observation_message(error: ObservationError, sandbox: Option<&str>
     if matches!(
         error,
         ObservationError::SandboxConfigurationRejected { .. }
+            | ObservationError::SandboxStartup { .. }
             | ObservationError::FabricConfiguration { .. }
     ) {
         format!(
@@ -312,7 +313,11 @@ impl Resource for ResourceAdapter {
                 private,
             )),
             Err(error) => {
-                diags.root_error("Resource observation", error.to_string());
+                let sandbox = state.get("name").and_then(|value| match value {
+                    Value::Value(name) => Some(name.as_str()),
+                    _ => None,
+                });
+                diags.root_error("Resource observation", observation_message(error, sandbox));
                 Some((state, private))
             }
         }

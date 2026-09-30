@@ -122,8 +122,9 @@ impl fmt::Display for ObservationError {
                 exit_code,
             } => write!(
                 f,
-                "sandbox unavailable: {phase}, reason {reason}, exit code {}; resources retained",
-                exit_code.map_or_else(|| "unknown".into(), |code| code.to_string())
+                "sandbox unavailable: {phase}, reason {reason}, exit code {}{}; resources retained",
+                exit_code.map_or_else(|| "unknown".into(), |code| code.to_string()),
+                error::sandbox_startup_guidance(reason)
             ),
             Self::FabricConfiguration {
                 stage,
