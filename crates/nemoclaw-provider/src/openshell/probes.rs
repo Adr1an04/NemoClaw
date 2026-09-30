@@ -139,19 +139,17 @@ impl OpenShell {
             binding,
             &base(sandbox.metadata.clone(), value(binding, "name"), false)?,
         )?;
-        if binding.contains_key("runtime_json") {
-            let (observed, _) = sandbox_row(
-                proto::SandboxResponse {
-                    sandbox: Some(sandbox.clone()),
-                    ..Default::default()
-                },
-                value(binding, "name"),
-                false,
-            )?;
-            for field in ["runtime_json", "agent_name", "agent_runtime"] {
-                if binding.get(field) != observed.get(field) {
-                    return Err(ObservationError::BindingMismatch.into());
-                }
+        let (observed, _) = sandbox_row(
+            proto::SandboxResponse {
+                sandbox: Some(sandbox.clone()),
+                ..Default::default()
+            },
+            value(binding, "name"),
+            false,
+        )?;
+        for field in ["runtime_json", "agent_name", "agent_runtime"] {
+            if binding.get(field) != observed.get(field) {
+                return Err(ObservationError::BindingMismatch.into());
             }
         }
         Ok(sandbox)
@@ -330,37 +328,13 @@ impl OpenShell {
 
     /// Query the existing hosted Fabric runtime; never invoke an agent or model.
     pub async fn health(&self, binding: &Row) -> Result<nemoclaw_sdk::RuntimeHealth, Error> {
-        self.health_for(binding, None).await
-    }
-
-    pub(crate) async fn health_for(
-        &self,
-        binding: &Row,
-        agent: Option<&str>,
-    ) -> Result<nemoclaw_sdk::RuntimeHealth, Error> {
         self.bridge(
             binding,
-            &[
-                "check",
-                "--agent",
-                agent.unwrap_or_else(|| value(binding, "agent_name")),
-                "--ready",
-            ],
+            &["check", "--agent", value(binding, "agent_name"), "--ready"],
             10,
         )
         .await?
         .health()
-    }
-
-    pub async fn inference_ready(&self, _binding: &Row) -> Result<(), Error> {
-        Err(Error::Conflict(
-            "Fabric does not expose a model-only inference probe contract; resources retained",
-        ))
-    }
-    pub async fn agent_response(&self, _binding: &Row) -> Result<String, Error> {
-        Err(Error::Conflict(
-            "Fabric does not expose a normalized text probe contract; resources retained",
-        ))
     }
 }
 

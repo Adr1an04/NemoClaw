@@ -404,8 +404,8 @@ pub fn assess_image_digest(image: &ImageMetadata, reference: &str) -> Compatibil
 }
 
 /// Evaluate adapter requirements and image metadata through one shared rule set.
-/// Platform checking is requested only when the caller supplies either engine
-/// platform field; legacy metadata-only callers do not acquire new prerequisites.
+/// Compare platforms only when execution-engine metadata is supplied; an
+/// external gateway's image store does not establish its execution platform.
 pub fn assess_image(
     catalog: Option<&FabricCatalog>,
     request: &FabricRequirements,

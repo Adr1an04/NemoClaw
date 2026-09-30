@@ -319,6 +319,16 @@ async fn sandbox_exec_uses_the_bound_workspace_and_rejects_substituted_identity(
     let binding = binding.unwrap();
     assert_ne!(binding["workspace"], "default");
     let command = vec!["fixture".into()];
+    let mut incomplete = binding.clone();
+    incomplete.remove("runtime_json");
+    assert!(
+        client
+            .exec_bound(&incomplete, command.clone(), Default::default(), 5)
+            .await
+            .is_err(),
+        "execution requires the retained image runtime binding"
+    );
+    assert!(fixture.state.lock().unwrap().exec_calls.is_empty());
     assert_eq!(
         client
             .exec_bound(&binding, command.clone(), Default::default(), 5)

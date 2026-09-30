@@ -185,12 +185,6 @@ async fn fabric_native_access_and_reconciliation_preserve_the_hosted_runtime() {
     assert_eq!(bindings(&directory).0, before);
     assert_eq!(managed_bindings(&directory), managed_before);
     assert_eq!(runtime_id(&client, &binding).await, hosted);
-    assert!(matches!(
-        client.agent_response(&binding).await,
-        Err(nemoclaw_sdk::Error::Conflict(
-            "Fabric does not expose a normalized text probe contract; resources retained"
-        ))
-    ));
     let response = invoke(&client, &binding, &agent.name, &input).await;
     assert!(
         successful_invocation(&response),
