@@ -93,6 +93,10 @@ The builder starts a temporary process with networking disabled to read installe
 It removes its temporary image tag after completion; it does not start an adapter or request model responses.
 The commands build and load local images; they do not publish images or launch a deployment.
 
+Installed discovery also requires the image-owned runtime manifest and resolves descriptor-required executables inside the image.
+If catalog generation reports a missing runtime manifest, required path, or executable, correct the image recipe before retrying.
+See the [metadata contract and current consumer limits](../image/NOTICE.md) before changing the image layout.
+
 On a native Linux AMD64 host, build the general-purpose Deep Agents runtime with the platform selector:
 
 ```sh

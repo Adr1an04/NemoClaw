@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 #[serde(deny_unknown_fields)]
 pub struct ImageRuntime {
     pub schema_version: u32,
-    /// Prefix for the packaged bridge's serve, configure, check, status and health operations.
+    /// Prefix prepended to a packaged bridge operation.
     pub command: Vec<String>,
     pub environment: BTreeMap<String, String>,
     pub required_paths: Vec<String>,

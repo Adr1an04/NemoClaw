@@ -36,6 +36,15 @@ The SDK checks explicit filesystem grants against those image-owned paths withou
 It does not publish images.
 Direct Docker Bake builds do not attach discovery metadata.
 
+[`fabric/runtime.json`](fabric/runtime.json) declares the image-owned bridge command, environment, required read paths, and default filesystem and process policy.
+Installed catalog generation requires this manifest and records it under `runtime` with `schema_version: 1`.
+[`fabric/runtime_metadata.py`](fabric/runtime_metadata.py) resolves each descriptor's `requirements.binaries` through the declared `PATH` and records canonical executable paths beside the unchanged descriptor.
+Each adapter also receives the actual `ADAPTER_PYTHON` interpreter path because the host runs Python adapters in-process.
+Missing executables, required paths, or the installed-image manifest fail catalog generation.
+The SDK preserves and validates this metadata during image discovery.
+Runtime launch and network-policy consumers still use their existing definitions; consuming the advertised layout and isolating image-specific provider grants remain part of issues [#12439](https://github.com/NVIDIA/NemoClaw/issues/12439) and [#12425](https://github.com/NVIDIA/NemoClaw/issues/12425).
+The [ARM64 metadata qualification](../docs/validation/image-runtime-metadata-linux-arm64.md) covers publication and decoding, not deployment with a relocated image.
+
 `fabric/catalog.json` is an offline snapshot produced by Fabric discovery at the revision and checksum recorded in that file and pinned in the Dockerfile.
 2026-09-24: serialize canonical descriptor records and provenance without local adapter additions or native schema patches.
 The bundled snapshot offers provisional authoring choices; it does not establish installation, health, credentials, or inference readiness on a target.
