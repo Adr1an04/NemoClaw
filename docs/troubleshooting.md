@@ -55,6 +55,20 @@ The [SDK errors](../crates/nemoclaw-sdk/src/error.rs), [plan checks](../crates/n
 An ownership error is not fixed by renaming a resource, deleting `intent.json`, editing OpenTofu state, or rerunning with a fresh state path against the same resources.
 Retain the original binding while investigating the selected gateway and engine.
 
+## Recover a Managed Gateway Startup Failure
+
+If a managed Docker gateway stops during readiness, the error names its container and reports the observed exit code, or `unknown` when unavailable.
+Read that container's logs on the configured engine using the [log collection procedure](#inspect-an-openshell-sandbox-failure).
+The readiness diagnostic omits raw engine errors and log contents because they may contain credentials.
+A running but unreachable gateway reports a transport failure; check its endpoint and engine access before retrying.
+
+Keep the YAML, matching bundle, and state directory.
+After correcting the image or configuration problem, explicitly reapply using the retained state; Docker may replace disposable gateway compute while NemoClaw verifies its retained storage and keys.
+If retiring the deployment, preview and [destroy](usage.md#destroy) it with the same state directory.
+Gateway readiness is omitted during teardown, so failed bootstrap with saved bindings can be cleaned up before a successful reapply.
+If OpenShell resources were already created, their refresh and deletion still require a reachable gateway; restore it before destroying them.
+The [gateway startup qualification](validation/gateway-startup-linux-arm64.md) records the tested paths and limits.
+
 ## Inference and Agent Readiness
 
 Use [inference verification](inference.md#verify-the-result) to distinguish configuration readiness from a successful reply.

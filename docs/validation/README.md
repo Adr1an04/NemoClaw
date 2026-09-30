@@ -28,6 +28,7 @@ The subsequent [managed Podman qualification](rust-managed-podman-linux-arm64.md
 
 | Behavior | Tests and Results |
 |---|---|
+| Managed Docker gateway exit diagnostics, bounded readiness, and recovery | [Linux ARM64 gateway startup qualification](gateway-startup-linux-arm64.md) |
 | Runtime policy rejection, safe sandbox diagnostics, retained bindings, recovery, and destroy | [Linux ARM64 policy rejection qualification](policy-rejection-linux-arm64.md) |
 | Runtime-image version checks, pre-mutation rejection, and image-only failure cleanup | [Linux ARM64 compatibility fixtures](runtime-image-compatibility-linux-arm64.md) |
 | Complete resource plans, unverified catalogs/readiness, and retained apply gates | [Linux ARM64 completeness fixtures](plan-completeness-linux-arm64.md) |

@@ -186,6 +186,16 @@ A positive timeout retries only transport failures, not authentication failures,
 For a managed gateway, the earlier runtime graph sets this timeout to 90 seconds and orders its capability read after gateway reconciliation.
 The capability postcondition must succeed before OpenShell resource refresh proceeds.
 
+For managed Docker gateways, the runtime graph also passes `managed_spec` and `container_id` from the Docker provider's process resource.
+These optional inputs must be supplied together and may remain unknown until apply.
+The data source validates the specification and checks the exact container ID, name, and owner through read-only engine inspection while waiting for the API.
+Two matching stopped or absent observations, separated by 200 milliseconds, stop a positive readiness wait; a restarting process can recover within the existing timeout.
+A zero timeout reports a stopped process on its first observation and continues inspecting a running process while the single API request is pending.
+A running but unreachable gateway remains a transport failure; failed or incomplete engine observations are not treated as process absence.
+The error names the container, includes its observed exit code when available, and points to its logs without copying raw engine errors or log text.
+The observation neither restarts nor deletes the process; follow [gateway startup recovery](troubleshooting.md#recover-a-managed-gateway-startup-failure).
+Podman and external gateway capability reads retain their API-only wait.
+
 A known data-source result can be retained in a saved plan.
 The deployment graph also declares `data.nemoclaw_gateway_capabilities.apply`, with a `read_trigger` that is unknown during planning.
 OpenTofu defers that read until apply and checks its compatibility postcondition before dependent resources can change, including on an otherwise unchanged apply.
