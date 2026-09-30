@@ -139,12 +139,24 @@ pub fn assess_fabric(catalog: &FabricCatalog, request: &FabricRequirements) -> C
             .get(&descriptor.descriptor.adapter_id)
             .into_iter()
             .flatten();
+        let runtime_paths: Vec<std::path::PathBuf> = catalog
+            .runtime
+            .as_ref()
+            .map(|runtime| {
+                runtime
+                    .required_paths
+                    .iter()
+                    .map(std::path::PathBuf::from)
+                    .collect()
+            })
+            .unwrap_or_default();
         for file in descriptor
             .descriptor
             .requirements
             .files
             .iter()
             .chain(image_files)
+            .chain(runtime_paths.iter())
         {
             // These are Linux sandbox paths, including on Windows clients.
             let allowed = file.to_str().is_some_and(|path| {

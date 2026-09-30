@@ -25,7 +25,7 @@ pub use image_pull_policy::ImagePullPolicy;
 mod inference_profile;
 pub use inference_profile::definition as inference_profile;
 mod sandbox_policy;
-pub use sandbox_policy::{isolated_policy, isolated_policy_matches, policy_json};
+pub use sandbox_policy::policy_json;
 mod network;
 pub use network::*;
 mod kinds;

@@ -1,13 +1,10 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+use nemoclaw_e2e::image_runtime::targets;
 use nemoclaw_e2e::openshell::Fixture;
 use nemoclaw_provider::openshell::{EnvironmentSecrets, OpenShell};
-use nemoclaw_sdk::{
-    backend::Backend,
-    compile::{Generations, targets},
-    config::Document,
-};
+use nemoclaw_sdk::{backend::Backend, compile::Generations, config::Document};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -240,7 +237,7 @@ async fn sandbox_launch_policy_and_provider_identity_survive_read_failures() {
             .as_ref()
             .unwrap()
             .providers,
-        ["local"]
+        [rows[2]["name"].clone()]
     );
     fixture.state.lock().unwrap().fail_read = Some(("policy", tonic::Code::NotFound));
     assert!(client.read("sandbox", &rows[3], false).await.is_err());
@@ -520,7 +517,13 @@ async fn explicit_policy_reaches_the_gateway_and_detects_drift() {
         .unwrap();
     assert_eq!(
         nemoclaw_provider::openshell::policy_json(spec.policy.as_ref().unwrap()).unwrap(),
-        sandbox["policy_json"]
+        nemoclaw_provider::openshell::policy_json(
+            &nemoclaw_sdk::image_runtime::RuntimeBinding::from_json(&sandbox["runtime_json"])
+                .unwrap()
+                .policy(&serde_json::from_str(&sandbox["policy_json"]).unwrap())
+                .unwrap()
+        )
+        .unwrap()
     );
     assert!(!spec.command.iter().any(|arg| arg.contains("PROXY=")));
     assert!(!spec.environment.keys().any(|key| key.contains("PROXY")));
@@ -528,7 +531,7 @@ async fn explicit_policy_reaches_the_gateway_and_detects_drift() {
     assert!(client.ensure("sandbox", sandbox).await.error().is_none());
     assert_eq!(fixture.state.lock().unwrap().effects, effects);
     // A loaded revision must match the sandbox specification, not just its status.
-    fixture.state.lock().unwrap().active_policy = Some(nemoclaw_provider::openshell::policy());
+    fixture.state.lock().unwrap().active_policy = Some(nemoclaw_e2e::image_runtime::policy());
     assert!(client.read("sandbox", sandbox, false).await.is_err());
     fixture.state.lock().unwrap().active_policy = None;
     // A coherent but different policy is observed as drift and never overwritten.
@@ -547,12 +550,7 @@ async fn explicit_policy_reaches_the_gateway_and_detects_drift() {
         .unwrap()
         .network_policies
         .clear();
-    let observed = client
-        .read("sandbox", sandbox, false)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_ne!(observed["policy_json"], sandbox["policy_json"]);
+    assert!(client.read("sandbox", sandbox, false).await.is_err());
     assert!(client.ensure("sandbox", sandbox).await.error().is_some());
     assert_eq!(fixture.state.lock().unwrap().effects, effects);
     fixture
@@ -648,7 +646,12 @@ async fn public_configuration_refresh_verifies_runtime_intent_without_mutation()
             .unwrap();
         assert_eq!(
             &command[..4],
-            ["fabric-agent", "configure", "--agent", "main"]
+            [
+                "/usr/local/bin/fabric-agent",
+                "configure",
+                "--agent",
+                "main"
+            ]
         );
         assert_eq!(command[4], "--config");
         assert!(command[5].starts_with("/sandbox/.nemoclaw-"));
@@ -761,7 +764,11 @@ async fn native_provider_union_is_attached_and_attachment_drift_is_rejected() {
             .spec
             .as_mut()
             .unwrap();
-        assert_eq!(sandbox.providers, vec!["hosted", "local"]);
+        assert_eq!(
+            sandbox.providers,
+            serde_json::from_str::<Vec<String>>(&desired["provider_names_json"]).unwrap()
+        );
+        assert_eq!(sandbox.providers.len(), 2);
         sandbox.providers.pop();
     }
     assert!(client.read("sandbox", &row, false).await.is_err());

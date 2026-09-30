@@ -259,3 +259,33 @@ fn image_compatibility_requires_a_matching_bridge_contract() {
     raw["bridge"]["health_checks"] = json!(["live", "active", "ready"]);
     assert_eq!(status(&raw), Support::Supported);
 }
+
+#[test]
+fn relocated_image_runtime_read_requirements_replace_client_layout_assumptions() {
+    use nemoclaw_sdk::fabric_capabilities::{FabricRequirements, Support, assess_fabric};
+    let mut catalog = catalog();
+    let mut runtime: serde_json::Value =
+        serde_json::from_str(include_str!("../../../image/fabric/runtime.json")).unwrap();
+    runtime["required_paths"] = json!(["/srv/runtime"]);
+    runtime["binaries"] = json!({"org.fixture.new-adapter":["/srv/runtime/python3.99"]});
+    catalog.runtime = Some(serde_json::from_value(runtime).unwrap());
+    for (paths, expected) in [
+        (
+            vec!["/usr", "/opt/fabric", "/opt/nemoclaw"],
+            Support::Unsupported,
+        ),
+        (vec!["/srv/runtime-other"], Support::Unsupported),
+        (vec!["/srv/runtime/../other"], Support::Unsupported),
+        (vec!["/srv"], Support::Supported),
+        (vec!["/srv/runtime"], Support::Supported),
+    ] {
+        let report = assess_fabric(
+            &catalog,
+            &FabricRequirements {
+                configuration: config(),
+                filesystem_read: Some(paths.into_iter().map(String::from).collect()),
+            },
+        );
+        assert_eq!(report.status, expected, "{:?}", report.checks);
+    }
+}

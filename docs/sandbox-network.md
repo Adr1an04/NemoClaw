@@ -12,8 +12,9 @@ Apply creates the sandbox and grants the access declared by the policy.
 
 ## Choose a Policy
 
-Omitting `network`, or declaring `tier: isolated`, selects the existing isolated preset.
-That preset permits inference routing without general egress and supplies the SDK's filesystem grants and process identity.
+Omitting `network`, or declaring `tier: isolated`, selects the image's advertised filesystem and process defaults.
+NemoClaw adds the declared inference and search endpoint grants without granting general egress.
+Those managed grants use only the selected adapter's executable paths resolved during image assembly.
 
 An explicit policy replaces the entire preset.
 Omit `tier` when declaring `policy.explicit`; combining a nonempty tier with an explicit policy is rejected.
@@ -39,11 +40,11 @@ Kernel enforcement still requires qualification on the deployment host.
 When an explicit policy declares `filesystem_policy`, NemoClaw checks that it permits reads of the selected harness's runtime directories.
 The same checks apply to inline harnesses and `harnessRef`, separately for every sandbox.
 
-- Plan and apply check `/opt/fabric` and `/opt/nemoclaw`, which every harness requires, before opening deployment state or contacting runtime services.
-- Selected-image assessment checks the files declared by the Fabric descriptor and the runtime directories that the image's catalog records for its adapter: `/app` for OpenClaw, `/opt/hermes` for Hermes, and `/opt/fabric-source` for Pi.
-  A missing grant makes the sandbox's compatibility `unsupported` and fails plan; `observation_json.compatibility` names the path.
-  Images without a catalog label, such as older images and direct Bake builds, skip this check.
-
+Selected-image assessment checks the Fabric descriptor's required files, the adapter's image-owned `runtime_files`, and the runtime manifest's `required_paths`.
+The packaged image declares `/opt/fabric` and `/opt/nemoclaw`; a relocated image declares its own paths.
+A missing grant makes compatibility `unsupported` and fails plan; `observation_json.compatibility` names the path.
+Images without runtime metadata, including older images and direct Bake builds, fail planning; follow [image rebuilding and selection](build.md#build-agent-images).
+Document parsing validates policy syntax without assuming an image layout.
 These checks do not establish every path a harness reads; verify additional harness paths against the selected image before applying.
 
 A read-only or read-write grant for the directory or a parent directory satisfies the check.

@@ -3,6 +3,7 @@
 
 //! Deterministic protocol fixtures shared by SDK and bundle lifecycle tests.
 use nemoclaw_provider::openshell::{EnvironmentSecrets, OpenShell};
+pub mod image_runtime;
 pub mod openshell;
 
 #[cfg(unix)]

@@ -139,6 +139,21 @@ impl OpenShell {
             binding,
             &base(sandbox.metadata.clone(), value(binding, "name"), false)?,
         )?;
+        if binding.contains_key("runtime_json") {
+            let (observed, _) = sandbox_row(
+                proto::SandboxResponse {
+                    sandbox: Some(sandbox.clone()),
+                    ..Default::default()
+                },
+                value(binding, "name"),
+                false,
+            )?;
+            for field in ["runtime_json", "agent_name", "agent_runtime"] {
+                if binding.get(field) != observed.get(field) {
+                    return Err(ObservationError::BindingMismatch.into());
+                }
+            }
+        }
         Ok(sandbox)
     }
     pub(crate) async fn check_sandbox_phase(&self, binding: &Row) -> Result<(), Error> {

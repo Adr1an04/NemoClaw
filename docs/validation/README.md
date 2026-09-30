@@ -28,6 +28,7 @@ The subsequent [managed Podman qualification](rust-managed-podman-linux-arm64.md
 
 | Behavior | Tests and Results |
 |---|---|
+| Relocated image launch, separate executable grants, unchanged apply, export, and teardown | [Linux ARM64 runtime consumer qualification](image-runtime-consumers-linux-arm64.md) |
 | Image-owned runtime metadata, executable resolution, and SDK catalog validation | [Linux ARM64 metadata qualification](image-runtime-metadata-linux-arm64.md) |
 | Failure-state boundaries, authored resource identities, restart guidance, and deferred proxy previews | [Linux ARM64 CLI results](cli-results-linux-arm64.md) |
 | Document validation paths, safe source positions, strict YAML tags, and conditional memory bounds | [Linux ARM64 configuration diagnostics](configuration-diagnostics-linux-arm64.md) |

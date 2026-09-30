@@ -3,10 +3,16 @@
 
 use nemoclaw_e2e::openshell::Fixture;
 use nemoclaw_provider::openshell::OpenShell;
-use nemoclaw_sdk::{backend::Backend, compile, config::Document};
+use nemoclaw_sdk::{backend::Backend, config::Document};
 use std::{collections::BTreeMap, sync::Arc};
 
 async fn sandbox() -> (Fixture, OpenShell, nemoclaw_sdk::backend::Row) {
+    sandbox_with_runtime(None).await
+}
+
+async fn sandbox_with_runtime(
+    runtime: Option<nemoclaw_sdk::image_runtime::RuntimeBinding>,
+) -> (Fixture, OpenShell, nemoclaw_sdk::backend::Row) {
     let fixture = Fixture::start().await;
     let mut doc = Document::parse(
         include_str!("../../nemoclaw-sdk/tests/fixtures/config/local.yaml").as_bytes(),
@@ -22,7 +28,18 @@ async fn sandbox() -> (Fixture, OpenShell, nemoclaw_sdk::backend::Row) {
         .into_iter()
         .map(|k| (k.into(), format!("{k}-generation")))
         .collect::<BTreeMap<_, _>>();
-    let targets = compile::targets(&doc, &generations).unwrap();
+    let mut targets = nemoclaw_e2e::image_runtime::targets(&doc, &generations).unwrap();
+    if let Some(runtime) = runtime {
+        targets
+            .iter_mut()
+            .find(|target| target.kind == "sandbox")
+            .unwrap()
+            .values
+            .insert(
+                "runtime_json".into(),
+                serde_json::to_string(&runtime).unwrap(),
+            );
+    }
     for target in targets.iter().filter(|target| {
         matches!(
             target.kind.as_str(),
@@ -90,7 +107,7 @@ async fn unsupported_health_retains_the_snapshot_but_does_not_complete_apply() {
     }
     let state = fixture.state.lock().unwrap();
     assert!(state.exec_calls.iter().all(|command| {
-        command[0] == "fabric-agent"
+        command[0] == "/usr/local/bin/fabric-agent"
             && command[1] == "check"
             && !command
                 .iter()
@@ -164,7 +181,7 @@ async fn fixture_generations_are_scoped_to_each_sandbox_host() {
             .exec_bound(
                 binding,
                 [
-                    "fabric-agent",
+                    "/usr/local/bin/fabric-agent",
                     "configure",
                     "--agent",
                     &binding["agent_name"],
@@ -198,7 +215,7 @@ async fn fixture_generations_are_scoped_to_each_sandbox_host() {
             .exec_bound(
                 &first,
                 [
-                    "fabric-agent",
+                    "/usr/local/bin/fabric-agent",
                     operation,
                     "--agent",
                     &first["agent_name"],
@@ -238,4 +255,98 @@ async fn fixture_confirmed_stop_clears_the_reported_configuration_association() 
     assert_eq!(snapshot.runtime_state, "stopped");
     assert!(snapshot.runtime_id.is_none());
     assert!(snapshot.applied_config.is_none());
+}
+
+#[tokio::test]
+async fn relocated_image_owns_bridge_commands_environment_and_staged_files() {
+    let mut runtime = nemoclaw_e2e::image_runtime::binding("fixture");
+    runtime.runtime.command = ["/srv/python3.99", "-I", "/srv/bridge.py"]
+        .map(String::from)
+        .to_vec();
+    runtime
+        .runtime
+        .environment
+        .insert("ADAPTER_PYTHON".into(), "/srv/python3.99".into());
+    runtime
+        .runtime
+        .environment
+        .insert("HOME".into(), "/work".into());
+    runtime
+        .runtime
+        .environment
+        .insert("TMPDIR".into(), "/work/tmp".into());
+    runtime
+        .runtime
+        .environment
+        .insert("PATH".into(), "/srv".into());
+    runtime
+        .runtime
+        .policy
+        .filesystem_policy
+        .as_mut()
+        .unwrap()
+        .read_write = Some(vec!["/work".into()]);
+    let (fixture, client, mut binding) = sandbox_with_runtime(Some(runtime.clone())).await;
+    let name = binding["agent_name"].clone();
+    binding.insert(
+        "config_json".into(),
+        serde_json::json!({"metadata":{"name":name}}).to_string(),
+    );
+    let result = client.configure_agent(&binding, false).await;
+    let calls = fixture.state.lock().unwrap().exec_calls.clone();
+    assert_eq!(
+        calls[0],
+        runtime.command("check", &["--agent", &name, "--live"])
+    );
+    result.unwrap();
+    assert_eq!(calls.len(), 4);
+    assert_eq!(calls[1][0], "/srv/python3.99");
+    let path = &calls[1][3];
+    assert!(path.starts_with("/work/.nemoclaw-"));
+    assert_eq!(
+        calls[2],
+        runtime.command(
+            "configure",
+            &[
+                "--agent",
+                &name,
+                "--config",
+                path,
+                "--expected-generation",
+                "fixture:0"
+            ]
+        )
+    );
+    assert_eq!(calls[3][0], "/srv/python3.99");
+    assert_eq!(calls[3].last(), Some(path));
+    {
+        let state = fixture.state.lock().unwrap();
+        assert!(state.staged_files.is_empty());
+        assert!(
+            state
+                .exec_environments
+                .iter()
+                .all(|environment| *environment == runtime.environment(&name).into_iter().collect())
+        );
+    }
+    let mut substituted = runtime.clone();
+    substituted.runtime.command = vec!["/srv/substituted".into()];
+    for encoded in [
+        None,
+        Some("{}".into()),
+        Some(serde_json::to_string(&substituted).unwrap()),
+    ] {
+        let mut invalid = binding.clone();
+        invalid.remove("runtime_json");
+        if let Some(encoded) = encoded {
+            invalid.insert("runtime_json".into(), encoded);
+        }
+        assert!(
+            client
+                .invoke_agent(&invalid, &serde_json::json!({"prompt":"hello"}))
+                .await
+                .is_err()
+        );
+    }
+    assert_eq!(fixture.state.lock().unwrap().exec_calls.len(), calls.len());
 }

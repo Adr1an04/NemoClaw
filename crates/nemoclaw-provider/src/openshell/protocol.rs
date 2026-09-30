@@ -9,6 +9,26 @@ use serde_json::Value;
 pub(super) const RESPONSE_LIMIT: usize = 4 * 1024 * 1024;
 const REQUEST_LIMIT: usize = 512 * 1024;
 
+// Sandbox paths use Linux semantics on every client platform.
+fn writable_directory(path: &str, grants: &[String]) -> bool {
+    let valid = |path: &str| {
+        path.starts_with('/') && !path.contains('\0') && !path.split('/').any(|part| part == "..")
+    };
+    valid(path)
+        && grants.iter().any(|grant| {
+            if !valid(grant) {
+                return false;
+            }
+            let mut parts = path
+                .split('/')
+                .filter(|part| !part.is_empty() && *part != ".");
+            grant
+                .split('/')
+                .filter(|part| !part.is_empty() && *part != ".")
+                .all(|part| parts.next() == Some(part))
+        })
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Response {
@@ -165,14 +185,13 @@ impl OpenShell {
         arguments: &[&str],
         seconds: u32,
     ) -> Result<Response, Error> {
-        if binding.get("agent_runtime").map(String::as_str) != Some("fabric") {
-            return Err(Error::Conflict("unsupported sandbox runtime"));
-        }
+        let runtime = agent::binding(binding)?;
+        let name = binding.get("agent_name").map(String::as_str).unwrap_or("");
         let (exit, output) = self
             .exec_bound(
                 binding,
-                agent::fabric_command(arguments),
-                Row::new(),
+                runtime.command(arguments[0], &arguments[1..]),
+                runtime.environment(name),
                 seconds,
             )
             .await?;
@@ -208,26 +227,39 @@ impl OpenShell {
         if payload.len() > REQUEST_LIMIT {
             return Err(Error::Conflict("Fabric input exceeds the request limit"));
         }
+        let runtime = agent::binding(binding)?;
+        let name = binding.get("agent_name").map(String::as_str).unwrap_or("");
+        let environment = runtime.environment(name);
+        let python = &environment["ADAPTER_PYTHON"];
+        let filesystem = super::row_policy(binding)?
+            .filesystem
+            .ok_or(ObservationError::Incomplete)?;
+        let directory = ["HOME", "TMPDIR"]
+            .into_iter()
+            .filter_map(|key| environment.get(key))
+            .find(|directory| writable_directory(directory, &filesystem.read_write))
+            .ok_or(Error::Conflict(
+                "image does not advertise a writable Fabric input directory",
+            ))?;
         let mut nonce = [0; 16];
         getrandom::fill(&mut nonce)
             .map_err(|_| Error::Conflict("cannot allocate Fabric input file"))?;
         let token: String = nonce.iter().map(|byte| format!("{byte:02x}")).collect();
-        let path = format!("/sandbox/.nemoclaw-{token}.json");
+        let path = format!("{}/.nemoclaw-{token}.json", directory.trim_end_matches('/'));
         let stage = self
             .exec_input(
                 binding,
                 vec![
-                    "/opt/fabric/bin/python".into(),
+                    python.clone(),
                     "-c".into(),
                     include_str!("stage_json.py").into(),
                     path.clone(),
                 ],
-                Row::new(),
+                environment.clone(),
                 20,
                 payload,
             )
             .await;
-        let name = binding.get("agent_name").map(String::as_str).unwrap_or("");
         let mut arguments = vec![
             operation,
             "--agent",
@@ -250,8 +282,8 @@ impl OpenShell {
         let cleanup = self
             .exec_bound(
                 binding,
-                vec!["rm".into(), "-f".into(), "--".into(), path],
-                Row::new(),
+                vec![python.clone(), "-c".into(), "from pathlib import Path; import sys; Path(sys.argv[1]).unlink(missing_ok=True)".into(), path],
+                environment,
                 20,
             )
             .await;
@@ -294,6 +326,29 @@ impl OpenShell {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn staging_uses_linux_directory_grants_on_every_client_platform() {
+        for (path, grant, expected) in [
+            ("/sandbox", "/sandbox", true),
+            ("/work/tmp", "/work", true),
+            ("/work/./tmp", "/work//", true),
+            ("/work", "/", true),
+            ("/work-other", "/work", false),
+            ("/work/../elsewhere", "/work", false),
+            ("/work", "/other/../work", false),
+            ("work", "/", false),
+            (r"C:\work", r"C:\work", false),
+            ("/work\0file", "/work", false),
+        ] {
+            assert_eq!(
+                writable_directory(path, &[grant.into()]),
+                expected,
+                "{path:?} in {grant:?}"
+            );
+        }
+        assert!(!writable_directory("/work", &[]));
+    }
 
     #[test]
     fn contradictory_or_incomplete_envelopes_never_confirm_an_outcome() {

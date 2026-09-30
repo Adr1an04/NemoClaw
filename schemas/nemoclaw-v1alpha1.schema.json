@@ -502,6 +502,10 @@
               "pattern": "^https?://",
               "type": "string"
             },
+            "engine": {
+              "description": "Engine containing the sandbox images, used only for image metadata inspection. Required for deployment planning; omission permits retained-state teardown.",
+              "type": "string"
+            },
             "management": {
               "const": "external",
               "description": "Whether this deployment manages the gateway.",

@@ -88,7 +88,7 @@ An observation describes the selected target at the time of its read; it is not 
 | Engine prerequisites | `nemoclaw_engine_capabilities`; selected Docker/Podman API | Onboarding target changes and managed deployment planning |
 | Engine features, CPU, memory, and advertised GPU inventory | `nemoclaw_target_hardware`; selected engine API | Onboarding and planning for selected gateway/service engines |
 | GPU memory, driver, compute capability, and disk measurements | Provider `observe_host_hardware` with a selected `HostObserver` | Explicit direct calls or existing configured service-capacity checks; the new passive hardware source does not run collectors |
-| Packaged adapters, APIs, settings, and runtime requirements | `nemoclaw_fabric_capabilities`; selected image metadata containing Fabric discovery results | Onboarding image changes and managed deployment planning |
+| Packaged adapters, APIs, settings, and runtime requirements | `nemoclaw_fabric_capabilities`; selected image metadata containing Fabric discovery results | Onboarding image changes and deployment planning |
 | Managed runtime specification, required labels, and platform | `nemoclaw_runtime_image`; selected engine image inspection | Plan for present images; after image acquisition before runtime mutations |
 | Advertised models and catalog authentication | `nemoclaw_inference_capabilities`; HTTP model-list endpoint from the control host | Onboarding endpoint changes and planning for selected inference routes |
 | Credential-reference availability | Direct SDK `observe_credentials`; application's secret resolver | Onboarding, SDK calls, and plan-result discovery; values and local availability do not enter provider state |
@@ -125,24 +125,36 @@ Missing native capability contracts and mismatched Fabric revisions remain unkno
 The `fabric_plan` check retains a bounded canonical field path and a fixed explanation for classified planner failures.
 Raw schema messages and rejected values are omitted; unsafe or overlong field identifiers fall back to `configuration`.
 For a rejected model token limit, the reason also names `overrides.maxTokens` and up to 16 model routes carrying that setting, including Fabric's generated `default` role.
-Managed deployment postconditions name the sandbox and adapter and preserve unsupported check reasons in text and JSON errors.
+Deployment postconditions name the sandbox and adapter and preserve unsupported check reasons in text and JSON errors.
 Onboarding uses the same assessment; unknown error variants retain a generic rejection.
 Omitting requirements preserves metadata-only discovery.
 
 The [agent image builder](build.md#build-agent-images) reads `Fabric.discover()` inside each assembled image and stores the result in `io.nemoclaw.fabric.catalog`.
 It selects installed-package records using Fabric's provenance, without editing their descriptors.
 Harness image stages declare the directories where their layout installs each adapter; the builder records them as `runtime_files`, keyed by adapter ID, beside the descriptors.
-With deployment filesystem grants, every path in the adapter descriptor's `requirements.files` and in its `runtime_files` entry must fall under a grant.
+With deployment filesystem grants, every path in the adapter descriptor's `requirements.files`, its `runtime_files` entry, and the image runtime's `required_paths` must fall under a grant.
 The bundled snapshot supports offline authoring and carries the same pinned Fabric revision and source checksum.
 See [source notices and regeneration](../image/NOTICE.md).
 Older images and direct Bake builds without labels remain unverified.
 Catalog identifiers are not restricted to a compiled SDK list.
 The runtime consumes the same canonical public configuration through Fabric; see [discovered harness configuration](sdk.md#configure-a-discovered-fabric-harness).
 
-For a managed gateway, generated graphs observe each sandbox image independently of resource creation or image acquisition.
-Lifecycle postconditions reject known engine incompatibility or conflicting image/adapter metadata.
-Unknown evidence is reported as deferred work; it does not relax required resource-refresh or gateway checks.
+Generated graphs observe each sandbox image independently of resource creation or image acquisition.
+Managed gateways use their configured engine; external gateways require `spec.gateway.engine` for image inspection and do not run managed-gateway prerequisite checks.
+With `requirements_json`, image discovery also returns `runtime_json`, the selected adapter and advertised runtime layout, and `binaries_json`, its resolved executable list.
+The sandbox consumes `runtime_json`; its `policy_json` retains authored policy and managed endpoint inputs, resolved against that layout before creation.
+Provider profiles require nonempty `binaries_json`; search registrations retain their scoped `profile_name`.
+Refresh verifies the actual launch and policy against retained metadata, and export and teardown do not need another image inspection.
+
+Inference registrations are scoped by authored provider identity, image digest, and adapter ID; search registrations also include the credential reference.
+Sandboxes using the same image and adapter can share registrations, while different image or adapter executable lists remain separate.
+Adding a sandbox preserves existing bindings.
+Export preserves authored definitions and refuses conflicting credential references among registrations for one inference definition.
+
+Lifecycle postconditions reject known engine incompatibility, conflicting image/adapter metadata, and missing image runtime metadata.
+Other unknown evidence does not relax required resource-refresh or gateway checks.
 An image observation is scoped to the selected engine, not every possible execution host.
+Legacy sandbox bindings without retained runtime metadata require their original bundle for recovery and teardown; automatic migration is not provided.
 
 ## Target Hardware
 

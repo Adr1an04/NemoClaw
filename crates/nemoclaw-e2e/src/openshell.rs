@@ -31,6 +31,7 @@ pub struct State {
     pub lose_configure_reply: bool,
     pub exec_stalled: bool,
     pub exec_calls: Vec<Vec<String>>,
+    pub exec_environments: Vec<HashMap<String, String>>,
     pub fabric_configurations: HashMap<String, serde_json::Value>,
     pub fabric_stopped: HashSet<String>,
     pub staged_files: HashMap<String, Vec<u8>>,
@@ -514,7 +515,10 @@ fn create_sandbox(
         return Err(Status::already_exists("collision"));
     }
     let sandbox = p::Sandbox {
-        metadata: Some(state.metadata(q.name, workspace(&q.workspace_scope)?, q.labels)),
+        metadata: Some(p::ObjectMeta {
+            annotations: q.annotations,
+            ..state.metadata(q.name, workspace(&q.workspace_scope)?, q.labels)
+        }),
         spec: q.spec,
         status: Some(p::SandboxStatus {
             phase: state.sandbox_phase.unwrap_or(p::SandboxPhase::Ready) as i32,
@@ -624,6 +628,10 @@ impl tonic::server::ServerStreamingService<p::ExecSandboxRequest> for Exec {
             return std::future::ready(Err(Status::not_found("absent")));
         };
         let sandbox_id = sandbox.metadata.as_ref().unwrap().id.clone();
+        let launch = &sandbox.spec.as_ref().unwrap().command;
+        let operation_index = launch.len() - 3;
+        let is_bridge = request.command.starts_with(&launch[..operation_index]);
+
         if state.exec_stalled {
             return std::future::ready(Ok(Response::new(Box::pin(tokio_stream::pending()))));
         }
@@ -639,11 +647,19 @@ impl tonic::server::ServerStreamingService<p::ExecSandboxRequest> for Exec {
                 .staged_files
                 .insert(request.command[3].clone(), request.stdin);
         }
-        if request.command.first().is_some_and(|c| c == "rm") {
+        if request
+            .command
+            .get(2)
+            .is_some_and(|code| code.contains(".unlink(missing_ok=True)"))
+        {
             state.staged_files.remove(request.command.last().unwrap());
         }
-        if request.command.first().is_some_and(|c| c == "fabric-agent") {
-            let operation = request.command.get(1).map(String::as_str).unwrap_or("");
+        if is_bridge {
+            let operation = request
+                .command
+                .get(operation_index)
+                .map(String::as_str)
+                .unwrap_or("");
             let flag = |name: &str| {
                 request
                     .command
@@ -770,11 +786,13 @@ impl tonic::server::ServerStreamingService<p::ExecSandboxRequest> for Exec {
             }
         }
         let truncated = state.exec_truncated
-            || (request
-                .command
-                .get(1)
-                .is_some_and(|operation| operation == "configure")
+            || (is_bridge
+                && request
+                    .command
+                    .get(operation_index)
+                    .is_some_and(|operation| operation == "configure")
                 && std::mem::take(&mut state.lose_configure_reply));
+        state.exec_environments.push(request.environment);
         state.exec_calls.push(request.command);
         if !truncated {
             events.push(Ok(p::ExecSandboxEvent {

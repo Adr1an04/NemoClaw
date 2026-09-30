@@ -1,5 +1,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Deployment planning requires image discovery, whose engine transports are Unix-only.
+// Windows retains deterministic bridge tests and an explicit unsupported-engine regression.
+#![cfg(unix)]
 
 use nemoclaw_e2e::{
     assert_same_deployment_state, assert_same_managed_resources, openshell::Fixture,
@@ -18,6 +21,7 @@ async fn cli_terminal_outputs_preserve_lifecycle_and_json_contract() {
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     let input = directory.path().join("deployment.yaml");
     let state = directory.path().join("state");
     fs::write(&input, document.yaml().unwrap()).unwrap();
@@ -113,9 +117,10 @@ async fn missing_selected_provider_reconciles_without_sandbox_changes() {
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     let deployment = Deployment::new(directory.path(), &bundle);
     let cancel = CancellationToken::new();
-    deployment.apply(&document, &cancel).await.unwrap();
+    let initial = deployment.apply(&document, &cancel).await.unwrap();
     let sandbox = fixture.state.lock().unwrap().sandboxes.clone();
     let profile = fixture.state.lock().unwrap().profiles.clone();
     fixture.state.lock().unwrap().providers.clear();
@@ -123,7 +128,12 @@ async fn missing_selected_provider_reconciles_without_sandbox_changes() {
     assert_eq!(recreated.changes.len(), 1);
     assert_eq!(
         recreated.changes[0].resource,
-        "nemoclaw_provider.inference_local"
+        initial
+            .changes
+            .iter()
+            .find(|change| change.resource.starts_with("nemoclaw_provider."))
+            .unwrap()
+            .resource
     );
     assert_eq!(recreated.changes[0].actions, ["create"]);
     assert_eq!(fixture.state.lock().unwrap().sandboxes, sandbox);
@@ -152,6 +162,7 @@ async fn independent_sandboxes_reconcile_concurrently_and_retain_shared_dependen
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     let mut second = document.spec.sandboxes[0].clone();
     second.name = "independent".into();
     document.spec.sandboxes.push(second);
@@ -198,6 +209,7 @@ async fn incompatible_gateway_is_reported_by_opentofu_plan_without_sdk_preflight
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     fixture.state.lock().unwrap().driver = Some("podman".into());
     let error = Deployment::new(directory.path(), &bundle)
         .plan(&document, &CancellationToken::new())
@@ -221,6 +233,7 @@ async fn gateway_change_between_plan_and_apply_preserves_resources_and_allows_te
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     let cancel = CancellationToken::new();
     let deployment = Deployment::new(directory.path(), &bundle);
     deployment.apply(&document, &cancel).await.unwrap();
@@ -286,6 +299,7 @@ async fn interrupted_create_preserves_pending_targets_allows_unrelated_intent_an
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     let deployment = Deployment::new(directory.path(), &bundle);
     let cancel = CancellationToken::new();
     fixture.state.lock().unwrap().lose_create = true;
@@ -545,6 +559,7 @@ async fn lifecycle_with_rejected_annotations(input: &str, reject_annotations: bo
             .path = Some("/docs/${file}/%{literal}".into());
     }
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     let search_provider = document.spec.sandboxes[0]
         .integration_bindings(&document.spec.integrations)
         .unwrap()
@@ -689,7 +704,18 @@ async fn lifecycle_with_rejected_annotations(input: &str, reject_annotations: bo
     assert_eq!(fixture.state.lock().unwrap().effects, effects);
     if let Some(search_provider) = search_provider {
         let state_bytes = fs::read(directory.path().join("terraform.tfstate")).unwrap();
-        let key = format!("{}/{}", document.workspace(), search_provider.profile());
+        let key = fixture
+            .state
+            .lock()
+            .unwrap()
+            .profiles
+            .iter()
+            .find(|(_, profile)| {
+                nemoclaw_sdk::config::SearchProvider::from_profile(&profile.id)
+                    == Some(search_provider)
+            })
+            .map(|(key, _)| key.clone())
+            .unwrap();
         let profile = fixture.state.lock().unwrap().profiles[&key].clone();
         fixture
             .state
@@ -811,7 +837,7 @@ async fn lifecycle_with_rejected_annotations(input: &str, reject_annotations: bo
                 .any(|command| {
                     command
                         .first()
-                        .is_some_and(|entrypoint| entrypoint == "fabric-agent")
+                        .is_some_and(|entrypoint| entrypoint == "/usr/local/bin/fabric-agent")
                         && command
                             .get(1)
                             .is_some_and(|operation| operation == "configure")
@@ -930,6 +956,7 @@ async fn readiness_and_observation_failures_retain_bindings_and_recover_without_
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     let deployment = Deployment::new(directory.path(), &bundle);
     let cancel = CancellationToken::new();
     fixture.state.lock().unwrap().sandbox_phase = Some(openshell_core::proto::SandboxPhase::Error);
@@ -1038,6 +1065,7 @@ async fn destroy_does_not_require_the_inference_credential_or_rewrite_its_refere
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     document.spec.inference_providers[0].endpoint = "https://inference.example.test/v1".into();
     document.spec.inference_providers[0].credential = Some(nemoclaw_sdk::config::Credential {
         env: "NEMOCLAW_TEST_REMOVED_INFERENCE_KEY".into(),
@@ -1089,6 +1117,7 @@ async fn apply_preserves_bindings_without_generating_inference() {
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     document.spec.inference_providers[0].endpoint = "https://unreachable.invalid/v1".into();
     document.spec.inference_providers[0].credential = Some(nemoclaw_sdk::config::Credential {
         env: "MODEL_TOKEN".into(),
@@ -1147,6 +1176,7 @@ async fn destroy_waits_for_graceful_sandbox_stop_without_retrying() {
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     let deployment = Deployment::new(directory.path(), &bundle);
     let cancel = CancellationToken::new();
     deployment.apply(&document, &cancel).await.unwrap();
@@ -1172,6 +1202,7 @@ async fn apply_health_failure_retains_resources_and_unchanged_apply_checks_again
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     let deployment = Deployment::new(directory.path(), &bundle);
     let cancel = CancellationToken::new();
     fixture.state.lock().unwrap().health_report = Some(serde_json::json!({
@@ -1306,6 +1337,7 @@ async fn mixed_sandboxes_reorder_add_recover_export_and_destroy_independently() 
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     let mut other = document.spec.sandboxes[0].clone();
     other.name = "research".into();
     other.harness.as_mut().unwrap().kind = "nvidia.fabric.langchain.deepagents".parse().unwrap();
@@ -1313,7 +1345,8 @@ async fn mixed_sandboxes_reorder_add_recover_export_and_destroy_independently() 
     let deployment = Deployment::new(directory.path(), &bundle);
     let cancel = CancellationToken::new();
     let preview = deployment.plan(&document, &cancel).await.unwrap();
-    assert_eq!(preview.changes.len(), 7);
+    // Each image/adapter scope owns its provider registration and executable grants.
+    assert_eq!(preview.changes.len(), 9);
     assert_eq!(fixture.state.lock().unwrap().effects, 0);
     let applied = deployment.apply(&document, &cancel).await.unwrap();
     assert_eq!(applied.health.len(), 2);
@@ -1414,6 +1447,7 @@ async fn successful_apply_checkpoints_mutations_before_reading_health() {
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     let cancel = CancellationToken::new();
     let interrupt = cancel.clone();
     let observed = Arc::new(Mutex::new((false, None)));
@@ -1480,6 +1514,7 @@ async fn failed_first_apply_can_destroy_bound_resources_without_successful_reapp
         )
         .unwrap();
         *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+        let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
         if sandbox_error {
             fixture.state.lock().unwrap().sandbox_phase =
                 Some(openshell_core::proto::SandboxPhase::Error);
@@ -1553,6 +1588,7 @@ async fn failed_first_configuration_accepts_corrected_intent_without_recreating_
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     let deployment = Deployment::new(directory.path(), &bundle);
     let cancel = CancellationToken::new();
     fixture.state.lock().unwrap().exec_exit = 1;
@@ -1598,6 +1634,7 @@ async fn cli_redaction_preserves_failures_and_recovery_with_short_and_colliding_
     )
     .unwrap();
     *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     document.spec.inference_providers[0].endpoint = "https://127.0.0.1:9/v1".into();
     document.spec.inference_providers[0].credential = Some(nemoclaw_sdk::config::Credential {
         env: "NEMOCLAW_TEST_REDACTION_KEY".into(),
@@ -1732,6 +1769,7 @@ async fn rejected_policy_fails_promptly_with_context_and_allows_recovery_or_dest
             Document::parse(include_str!("../../../examples/explicit-policy.yaml").as_bytes())
                 .unwrap();
         *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+        let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
         let name = document.spec.sandboxes[0].name.clone();
         {
             let mut state = fixture.state.lock().unwrap();
@@ -1845,7 +1883,8 @@ async fn pi_start_failure_names_the_sandbox_in_cli_text_and_json_and_allows_dest
         input["spec"]["gateway"]["endpoint"] = fixture.endpoint.clone().into();
         input["spec"]["sandboxes"][0]["name"] = "coder".into();
         input["spec"]["sandboxes"][0]["harness"]["kind"] = "nvidia.fabric.pi".into();
-        let document = Document::parse(input.to_string().as_bytes()).unwrap();
+        let mut document = Document::parse(input.to_string().as_bytes()).unwrap();
+        let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
         let input = directory.path().join("input.yaml");
         fs::write(&input, document.yaml().unwrap()).unwrap();
         let state = directory.path().join("state");
@@ -1936,7 +1975,8 @@ async fn sandbox_startup_failure_names_reason_and_guidance_and_allows_destroy() 
         .unwrap();
         input["spec"]["gateway"]["endpoint"] = fixture.endpoint.clone().into();
         input["spec"]["sandboxes"][0]["name"] = "coder".into();
-        let document = Document::parse(input.to_string().as_bytes()).unwrap();
+        let mut document = Document::parse(input.to_string().as_bytes()).unwrap();
+        let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
         let input = directory.path().join("input.yaml");
         fs::write(&input, document.yaml().unwrap()).unwrap();
         let state = directory.path().join("state");
@@ -2031,7 +2071,8 @@ async fn scoped_provider_labels_and_stopped_runtime_plans_preserve_authored_iden
     input["spec"]["sandboxes"][0]["inferenceProviders"] = serde_json::json!([provider]);
     input["spec"]["sandboxes"][0]["agent"]["inference"]["routes"][0]["providerRef"] =
         "responses".into();
-    let document = Document::parse(input.to_string().as_bytes()).unwrap();
+    let mut document = Document::parse(input.to_string().as_bytes()).unwrap();
+    let _image_engine = nemoclaw_e2e::image_runtime::engine(&mut document).await;
     let state = directory.path().join("state");
     let input = directory.path().join("input.yaml");
     fs::write(&input, document.yaml().unwrap()).unwrap();

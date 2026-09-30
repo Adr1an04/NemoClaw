@@ -155,6 +155,10 @@ pub struct ManagedGateway {
 #[serde(default, deny_unknown_fields)]
 /// Connection settings for an existing gateway. Credentials and TLS require HTTPS.
 pub struct ExternalGateway {
+    /// Engine containing the sandbox images, used only for image metadata inspection. Required for deployment planning; omission permits retained-state teardown.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[schemars(default)]
+    pub engine: String,
     /// Gateway HTTP(S) origin, without a path.
     pub endpoint: String,
     #[serde(rename = "credential", skip_serializing_if = "Option::is_none")]

@@ -12,7 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-from fabric import RuntimeHost
+from fabric import RuntimeHost, client, parse_command
 from nemo_fabric import Fabric, FabricConfigError, FabricRuntimeError
 
 CONFIG = {
@@ -40,6 +40,35 @@ class RuntimeReadback(unittest.IsolatedAsyncioTestCase):
         mock.start()
         self.addCleanup(mock.stop)
         self.host = RuntimeHost("main")
+
+    async def test_check_returns_applied_configuration_without_invoking_or_reconfiguring(self):
+        await configure(self.host, CONFIG)
+        self.runtime.invoke = AsyncMock()
+        before = self.host.snapshot()
+        requests = []
+        with tempfile.TemporaryDirectory() as directory:
+            socket = str(Path(directory) / "fabric.sock")
+
+            async def respond(reader, writer):
+                request = json.loads(await reader.readline())
+                requests.append(request)
+                response = await self.host.handle(request)
+                writer.write(json.dumps(response).encode() + b"\n")
+                await writer.drain()
+                writer.close()
+                await writer.wait_closed()
+
+            async with await asyncio.start_unix_server(respond, socket):
+                with patch("fabric.SOCKET", socket):
+                    response = await client(parse_command(["check", "--agent", "main", "--live"]))
+        self.assertEqual(requests, [{"operation": "check", "agent": "main", "level": "live"}])
+        self.assertEqual(response["status"], "unsupported")
+        self.assertFalse(response["changed"])
+        self.assertEqual(response["result"], {**before, "health": None})
+        self.assertEqual(self.host.snapshot(), before)
+        self.api.start_runtime.assert_awaited_once()
+        self.runtime.stop.assert_not_awaited()
+        self.runtime.invoke.assert_not_awaited()
 
     async def test_readback_is_reconstructible_and_unchanged_apply_does_not_restart(self):
         self.assertIsNone(self.host.snapshot()["applied_config"])

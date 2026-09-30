@@ -95,7 +95,13 @@ The commands build and load local images; they do not publish images or launch a
 
 Installed discovery also requires the image-owned runtime manifest and resolves descriptor-required executables inside the image.
 If catalog generation reports a missing runtime manifest, required path, or executable, correct the image recipe before retrying.
-See the [metadata contract and current consumer limits](../image/NOTICE.md) before changing the image layout.
+See the [image metadata contract](../image/NOTICE.md) before changing the image layout.
+
+Plan requires the selected image's runtime metadata to supply its bridge command, environment, default policy, and executable grants.
+For an external gateway, also set `spec.gateway.engine` to the engine containing that same immutable sandbox image; NemoClaw does not assume the client host's Docker socket.
+This engine is used only for image inspection and does not authorize managing the external gateway.
+A missing image, missing metadata, or omitted external engine stops planning with a diagnostic; load a matching image or rebuild it, then retry.
+Keep the original bundle and state to operate or destroy deployments created before runtime metadata was retained; this change does not migrate their sandbox bindings.
 
 On a native Linux AMD64 host, build the general-purpose Deep Agents runtime with the platform selector:
 

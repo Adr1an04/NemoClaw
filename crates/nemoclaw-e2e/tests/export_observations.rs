@@ -172,7 +172,7 @@ async fn export_rejects_observed_pi_model_drift_without_reconfiguring_it() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires explicit verified NEMOCLAW_TEST_BUNDLE; isolated gateway fixture"]
 async fn mixed_search_export_preserves_scopes_shared_registrations_and_state_on_drift() {
-    use nemoclaw_sdk::config::{SearchProvider, search_provider_name};
+    use nemoclaw_sdk::config::SearchProvider;
     use std::{process::Command, sync::Arc};
 
     struct Values;
@@ -274,7 +274,26 @@ async fn mixed_search_export_preserves_scopes_shared_registrations_and_state_on_
         let key = format!(
             "{}/{}",
             document.workspace(),
-            search_provider_name(provider, reference)
+            fixture
+                .state
+                .lock()
+                .unwrap()
+                .providers
+                .values()
+                .find(|p| p
+                    .metadata
+                    .as_ref()
+                    .unwrap()
+                    .labels
+                    .get(nemoclaw_provider::openshell::CREDENTIAL)
+                    .map(String::as_str)
+                    == Some(reference))
+                .unwrap()
+                .metadata
+                .as_ref()
+                .unwrap()
+                .name
+                .clone()
         );
         for field in ["credential", "type"] {
             {

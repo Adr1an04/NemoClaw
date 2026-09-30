@@ -27,9 +27,26 @@ impl Standalone {
             include_str!("openshell_resources.tf"),
         )
         .unwrap();
+        let runtime = nemoclaw_e2e::image_runtime::binding("nvidia.fabric.pi");
+        let mut document = nemoclaw_sdk::config::Document::parse(
+            include_str!("../../../nemoclaw-sdk/tests/fixtures/config/local.yaml").as_bytes(),
+        )
+        .unwrap();
+        document.spec.inference_providers[0].endpoint = "http://127.0.0.1:11434/v1".into();
+        let policy = nemoclaw_sdk::image_runtime::PolicyInput::for_sandbox(
+            &document,
+            &document.spec.sandboxes[0],
+        )
+        .unwrap();
         fs::write(
             root.path().join("terraform.tfvars.json"),
-            json!({"endpoint":endpoint}).to_string(),
+            json!({
+                "endpoint": endpoint,
+                "runtime_json": serde_json::to_string(&runtime).unwrap(),
+                "policy_json": serde_json::to_string(&policy).unwrap(),
+                "binaries_json": serde_json::to_string(runtime.binaries()).unwrap(),
+            })
+            .to_string(),
         )
         .unwrap();
         Self { root, tofu }
@@ -604,11 +621,10 @@ async fn deferred_provider_keeps_bindings_when_bootstrap_endpoint_changes() {
     tofu.apply();
     let prior = tofu.state();
     let effects = fixture.state.lock().unwrap().effects;
-    fs::write(
-        tofu.root.path().join("terraform.tfvars.json"),
-        json!({"endpoint":next.endpoint}).to_string(),
-    )
-    .unwrap();
+    let variables_path = tofu.root.path().join("terraform.tfvars.json");
+    let mut variables: Value = serde_json::from_slice(&fs::read(&variables_path).unwrap()).unwrap();
+    variables["endpoint"] = json!(next.endpoint);
+    fs::write(variables_path, variables.to_string()).unwrap();
     tofu.run(&["plan", "-input=false"], false);
     assert_eq!(tofu.state(), prior);
     assert_eq!(fixture.state.lock().unwrap().effects, effects);
