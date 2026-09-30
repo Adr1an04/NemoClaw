@@ -471,7 +471,10 @@ mod tests {
             if let Some((pending, destroying, destroyed)) = flags {
                 let mut record = Record::new(document.clone()).unwrap();
                 if pending {
-                    record.begin_runtime_apply(&document);
+                    let target = compile::targets(&document, &record.generations)
+                        .unwrap()
+                        .remove(0);
+                    record.begin_apply(&document, [(target.address, target.values)].into());
                 }
                 if destroying {
                     record.begin_destroy();
