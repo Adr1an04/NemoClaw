@@ -167,6 +167,8 @@ Its Dockerfile applies pinned patches and retains original and modified sources.
 Use [the inline recipe guide](recipes.md) to declare preparation and serving requirements.
 
 The builder exports an OCI archive, loads it, and verifies access by its exported digest and target platform.
+It sets `org.nemoclaw.runtime.spec=v1` from the shared runtime contract and verifies that label on the loaded image.
+The retained `supervisor.json` records the same `runtimeSpecVersion` alongside the runtime source version.
 Use the immutable image reference printed as `Runtime image loaded: NAME@sha256:DIGEST` for `spec.services.<name>.image`.
 Do not substitute a mutable tag or a digest copied from another build.
 If deployment uses a different Docker daemon, load the archive into that daemon before apply; images are not transferred automatically.
@@ -191,3 +193,17 @@ The image contains `nemoclaw-runtime`.
 The inline recipe supplies preparation and verification tools; `kind: vllm` selects the service installer and serving behavior.
 Managed containers use `/usr/local/bin/nemoclaw-runtime` and `NEMOCLAW_RUNTIME_SPEC`.
 The former `nemoclaw-spark` entrypoint and `NEMOCLAW_SPARK_SPEC` environment alias are no longer accepted.
+
+The SDK checks a managed vLLM or Ollama image's runtime-spec label, required backend/recipe/authentication labels, and platform through the provider before creating runtime resources.
+An already loaded image with a missing or incompatible runtime-spec label fails plan and apply with rebuild guidance.
+When the image must be acquired, plan reports compatibility as deferred; apply may pull the image, then checks it before creating storage, networks, or containers.
+A matching label establishes the declared runtime contract, not successful model loading or inference.
+
+For a runtime-spec mismatch, rebuild the selected artifact from the bundle's source revision using the matching vLLM platform/recipe command above or the [managed Ollama build instructions](inference.md#run-managed-ollama).
+Load the rebuilt image on the execution daemon and update `spec.services.<name>.image` to the newly printed digest.
+Keep the deployment state and reapply; existing model and credential storage remain subject to their ordinary retention and identity checks.
+Destroy omits image compatibility gates so a mismatched image alone does not prevent cleanup.
+The runtime also reports its expected specification version and declared field location for invalid input, without echoing configuration values or user-defined map keys.
+
+Developers must increment `nemoclaw_runtime::SPEC_VERSION` when serialized fields or validation changes make the runtime contract incompatible.
+The image builder, SDK requirements, and provider check share that constant; the label does not identify an exact source revision.

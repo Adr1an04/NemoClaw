@@ -28,6 +28,7 @@ The subsequent [managed Podman qualification](rust-managed-podman-linux-arm64.md
 
 | Behavior | Tests and Results |
 |---|---|
+| Runtime-image version checks, pre-mutation rejection, and image-only failure cleanup | [Linux ARM64 compatibility fixtures](runtime-image-compatibility-linux-arm64.md) |
 | Complete resource plans, unverified catalogs/readiness, and retained apply gates | [Linux ARM64 completeness fixtures](plan-completeness-linux-arm64.md) |
 | Brave and Tavily export, authored integration scopes, shared registrations, and drift refusal | [Linux ARM64 search export fixtures](web-search-export-linux-arm64.md) |
 | Short and colliding credentials, bounded diagnostics, and CLI failure recovery | [Linux ARM64 redaction fixtures](credential-redaction-linux-arm64.md) |

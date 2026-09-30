@@ -31,7 +31,7 @@ The generated graphs manage these objects and observations:
 | NemoClaw provider | OpenShell workspace, provider, profile, sandbox, and Fabric runtime configuration |
 | NemoClaw provider | Podman gateway process (`nemoclaw_managed_gateway`); gateway storage, initialization, and retained bridge (`nemoclaw_gateway_storage`) |
 | NemoClaw provider | Retained inference credentials and proxy storage; external Ollama model observation |
-| NemoClaw provider data source | Engine and Fabric image capabilities, gateway capabilities, vLLM/Ollama service or proxy readiness, and sandbox completion |
+| NemoClaw provider data source | Engine and Fabric image capabilities, managed runtime-image compatibility, gateway capabilities, vLLM/Ollama service or proxy readiness, and sandbox completion |
 | Docker provider | Docker gateway, inference, and proxy containers; model-cache volumes, service-owned networks and acquired images |
 | Docker provider data source | Local images selected with `imagePullPolicy: Never` |
 
@@ -89,6 +89,7 @@ An observation describes the selected target at the time of its read; it is not 
 | Engine features, CPU, memory, and advertised GPU inventory | `nemoclaw_target_hardware`; selected engine API | Onboarding and planning for selected gateway/service engines |
 | GPU memory, driver, compute capability, and disk measurements | Provider `observe_host_hardware` with a selected `HostObserver` | Explicit direct calls or existing configured service-capacity checks; the new passive hardware source does not run collectors |
 | Packaged adapters, APIs, settings, and runtime requirements | `nemoclaw_fabric_capabilities`; selected image metadata containing Fabric discovery results | Onboarding image changes and managed deployment planning |
+| Managed runtime specification, required labels, and platform | `nemoclaw_runtime_image`; selected engine image inspection | Plan for present images; after image acquisition before runtime mutations |
 | Advertised models and catalog authentication | `nemoclaw_inference_capabilities`; HTTP model-list endpoint from the control host | Onboarding endpoint changes and planning for selected inference routes |
 | Credential-reference availability | Direct SDK `observe_credentials`; application's secret resolver | Onboarding, SDK calls, and plan-result discovery; values and local availability do not enter provider state |
 | Gateway version and compute drivers | Existing `nemoclaw_gateway_capabilities`; authenticated OpenShell API | Onboarding review and required deployment lifecycle checks |
@@ -202,6 +203,21 @@ Teardown omits the capability gates so a version or driver mismatch alone does n
 [Deployment fixtures](../crates/nemoclaw-e2e/tests/deployment.rs) and [Fabric lifecycle fixtures](../crates/nemoclaw-e2e/tests/fabric_deployment.rs) verify that the SDK uses the same apply-time protection.
 Fabric configuration writes are owned by `nemoclaw_agent_configuration`; unchanged apply preserves the active runtime handle.
 Its `config_json` is the canonical public Fabric configuration, separate from immutable sandbox identity.
+
+## Runtime Image Compatibility
+
+`nemoclaw_runtime_image` requires the compiled managed-service `spec` and returns `observation_json` with `status`, `source`, and `required_version`.
+The source checks the vLLM or Ollama image's `org.nemoclaw.runtime.spec` label against the shared runtime contract, plus the compiled platform and required backend, recipe, and authentication labels.
+It performs one engine image inspection with a 20-second bound and never pulls an image or starts a process.
+Missing or mismatched runtime-spec labels fail with [rebuild guidance](build.md#retained-sources-and-compatibility); authentication, transport, and incomplete inspection failures also stop the operation.
+Diagnostics do not echo image label values.
+
+Optional `allow_missing: true` permits a confirmed absent image to return `status: unknown` before acquisition; omission or false rejects absence.
+Optional `image_id` requires the inspected image to match the Docker provider's acquired image ID.
+The SDK emits a read for the currently selected image and another dependent on acquisition, then orders all other runtime resource mutations after compatibility succeeds.
+An absent image may therefore be pulled before a compatibility failure, but storage, network, and container creation remain blocked.
+SDK plan reports preserve unresolved runtime-image checks in `deferred`, separate from supplemental catalog and service-readiness advisories.
+Teardown removes both image observations and their dependency gates.
 
 ## Runtime Capacity and Readiness
 
