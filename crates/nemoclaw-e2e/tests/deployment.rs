@@ -1691,3 +1691,116 @@ async fn cli_redaction_preserves_failures_and_recovery_with_short_and_colliding_
     );
     assert!(fixture.state.lock().unwrap().sandboxes.is_empty());
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires explicit verified NEMOCLAW_TEST_BUNDLE; isolated gateway rejection fixture"]
+async fn rejected_policy_fails_promptly_with_context_and_allows_recovery_or_destroy() {
+    use openshell_core::proto::{
+        ConfigurationAdmissionState, SandboxConfigurationAdmission, SandboxPhase,
+    };
+    let bundle = PathBuf::from(std::env::var_os("NEMOCLAW_TEST_BUNDLE").unwrap());
+    for recover in [false, true] {
+        let directory = tempfile::tempdir().unwrap();
+        let fixture = Fixture::start().await;
+        let mut document =
+            Document::parse(include_str!("../../../examples/explicit-policy.yaml").as_bytes())
+                .unwrap();
+        *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+        let name = document.spec.sandboxes[0].name.clone();
+        {
+            let mut state = fixture.state.lock().unwrap();
+            state.sandbox_phase = Some(SandboxPhase::Starting);
+            state.configuration_admission = Some(SandboxConfigurationAdmission {
+                state: ConfigurationAdmissionState::Rejected as i32,
+                error: "Effective configuration could not be activated; replace the policy or repair attached providers".into(),
+                instance_id: "PRIVATE_SENTINEL".into(),
+                policy_version: 1,
+                ..Default::default()
+            });
+        }
+        let input = directory.path().join("input.yaml");
+        let state_dir = directory.path().join("state");
+        fs::write(&input, document.yaml().unwrap()).unwrap();
+        let deployment = Deployment::new(&state_dir, &bundle);
+        let cancel = CancellationToken::new();
+        deployment.plan(&document, &cancel).await.unwrap();
+        assert_eq!(fixture.state.lock().unwrap().effects, 0);
+        let started = std::time::Instant::now();
+        let output = Command::new(bundle.join("bin/nemoclaw"))
+            .args(["--state-dir"])
+            .arg(&state_dir)
+            .args([
+                "apply",
+                "--progress",
+                "off",
+                "-o",
+                if recover { "text" } else { "json" },
+            ])
+            .arg(&input)
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        let diagnostic = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            diagnostic.contains("configuration rejected"),
+            "{diagnostic}"
+        );
+        assert!(
+            diagnostic.contains(&format!("sandbox/{name}")),
+            "{diagnostic}"
+        );
+        assert!(
+            diagnostic.contains("replace the policy or repair attached providers"),
+            "{diagnostic}"
+        );
+        assert!(!diagnostic.contains("PRIVATE_SENTINEL"), "{diagnostic}");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(15),
+            "known rejection must not wait for the startup deadline"
+        );
+        let sandboxes = fixture.state.lock().unwrap().sandboxes.clone();
+        let effects = fixture.state.lock().unwrap().effects;
+        assert_eq!(sandboxes.len(), 1);
+        assert!(fixture.state.lock().unwrap().exec_calls.is_empty());
+        if recover {
+            // Simulate upstream repair and acknowledgement, then retry using
+            // the original sandbox and its retained identity.
+            {
+                let mut state = fixture.state.lock().unwrap();
+                for sandbox in state.sandboxes.values_mut() {
+                    let status = sandbox.status.as_mut().unwrap();
+                    status.phase = SandboxPhase::Ready as i32;
+                    let admission = status.configuration_admission.as_mut().unwrap();
+                    admission.state = ConfigurationAdmissionState::Accepted as i32;
+                    admission.error.clear();
+                }
+            }
+            deployment.apply(&document, &cancel).await.unwrap();
+            assert_eq!(fixture.state.lock().unwrap().effects, effects);
+            for (key, sandbox) in &sandboxes {
+                assert_eq!(
+                    fixture.state.lock().unwrap().sandboxes[key].metadata,
+                    sandbox.metadata
+                );
+            }
+            let exported = deployment.export(&cancel).await.unwrap();
+            assert_eq!(exported, document);
+            assert!(
+                deployment
+                    .apply(&exported, &cancel)
+                    .await
+                    .unwrap()
+                    .changes
+                    .is_empty()
+            );
+        }
+        deployment.plan_destroy(&cancel).await.unwrap();
+        deployment.destroy(&cancel).await.unwrap();
+        assert!(fixture.state.lock().unwrap().sandboxes.is_empty());
+        assert_eq!(fixture.state.lock().unwrap().delete_calls, 1);
+    }
+}

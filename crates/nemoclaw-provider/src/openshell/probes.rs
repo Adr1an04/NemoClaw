@@ -43,6 +43,33 @@ fn startup_phase(status: proto::SandboxStatus) -> Result<i32, Error> {
     Ok(status.phase)
 }
 
+fn configuration_phase(status: proto::SandboxStatus) -> Result<i32, Error> {
+    if let Some(admission) = &status.configuration_admission
+        && admission.state == proto::ConfigurationAdmissionState::Rejected as i32
+    {
+        // The pinned gateway replaces runtime parser text with public admission
+        // diagnostics. Keep only its fixed vocabulary; never echo unknown text,
+        // policy load_error, credentials, or supervisor instance identifiers.
+        let reason = match admission.error.as_str() {
+            "Effective configuration could not be activated; replace the policy or repair attached providers" => {
+                "Effective configuration could not be activated; replace the policy or repair attached providers"
+            }
+            "Effective provider configuration is invalid; repair credential bindings, attached providers, or their policy layers" => {
+                "Effective provider configuration is invalid; repair credential bindings, attached providers, or their policy layers"
+            }
+            "Effective middleware configuration is invalid; repair the policy middleware bindings or registered services" => {
+                "Effective middleware configuration is invalid; repair the policy middleware bindings or registered services"
+            }
+            "Stored policy structure or safety validation failed; submit a complete valid replacement policy" => {
+                "Stored policy structure or safety validation failed; submit a complete valid replacement policy"
+            }
+            _ => "inspect the sandbox configuration; repair its policy or attached providers",
+        };
+        return Err(ObservationError::SandboxConfigurationRejected { reason }.into());
+    }
+    startup_phase(status)
+}
+
 fn configuration_failure(output: &[u8]) -> ObservationError {
     let report: serde_json::Value = serde_json::from_slice(output).unwrap_or_default();
     let error = &report["error"];
@@ -201,7 +228,7 @@ impl OpenShell {
     pub async fn configure_agent(&self, binding: &Row, prepare: bool) -> Result<(), Error> {
         tokio::time::timeout(Duration::from_secs(120), async {
             loop {
-                let phase = startup_phase(
+                let phase = configuration_phase(
                     self.bound_sandbox(binding)
                         .await?
                         .status
@@ -237,7 +264,8 @@ impl OpenShell {
         let wait = async {
             loop {
                 let sandbox = self.bound_sandbox(binding).await?;
-                let phase = startup_phase(sandbox.status.ok_or(ObservationError::Incomplete)?)?;
+                let phase =
+                    configuration_phase(sandbox.status.ok_or(ObservationError::Incomplete)?)?;
                 if phase == proto::SandboxPhase::Ready as i32 {
                     let (command, environment) = self.configuration_command(binding)?;
                     if let Ok((0, _)) = self.exec_bound(binding, command, environment, 20).await {

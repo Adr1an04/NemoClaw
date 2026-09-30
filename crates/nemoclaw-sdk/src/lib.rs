@@ -99,6 +99,9 @@ pub enum ObservationError {
         code: &'static str,
         runtime_state: &'static str,
     },
+    SandboxConfigurationRejected {
+        reason: &'static str,
+    },
     SandboxStartup {
         phase: &'static str,
         reason: &'static str,
@@ -109,6 +112,10 @@ pub enum ObservationError {
 impl fmt::Display for ObservationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::SandboxConfigurationRejected { reason } => write!(
+                f,
+                "OpenShell configuration rejected: {reason}; resources retained"
+            ),
             Self::SandboxStartup {
                 phase,
                 reason,

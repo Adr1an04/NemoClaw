@@ -13,6 +13,17 @@ use tf_provider::schema::{Attribute, AttributeConstraint, AttributeType, Block, 
 use tf_provider::value::{Value, ValueEmpty};
 use tf_provider::{AttributePath, Diagnostics, Resource};
 
+pub(crate) fn observation_message(error: ObservationError, sandbox: Option<&str>) -> String {
+    if matches!(error, ObservationError::SandboxConfigurationRejected { .. }) {
+        format!(
+            "sandbox/{}: {error}",
+            sandbox.unwrap_or("unknown").escape_default()
+        )
+    } else {
+        error.to_string()
+    }
+}
+
 pub struct ResourceAdapter {
     definition: Definition,
     backend: Arc<dyn Backend>,
@@ -203,7 +214,10 @@ impl ResourceAdapter {
     ) -> Option<State> {
         let (state, error) = mutation.into_parts();
         if let Some(error) = error {
-            diags.root_error("Apply incomplete", error.to_string());
+            diags.root_error(
+                "Apply incomplete",
+                observation_message(error, desired.get("name").map(String::as_str)),
+            );
         }
         match state {
             Some(row) => match self.checked(desired, row) {

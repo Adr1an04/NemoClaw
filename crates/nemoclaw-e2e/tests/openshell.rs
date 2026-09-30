@@ -797,3 +797,169 @@ async fn terminal_startup_reports_phase_and_exit_without_echoing_backend_text() 
         assert!(!error.contains("secret-do-not-print"));
     }
 }
+
+#[tokio::test]
+async fn rejected_configuration_stops_startup_without_exec_and_preserves_bindings() {
+    use openshell_core::proto::{
+        ConfigurationAdmissionState, SandboxConfigurationAdmission, SandboxPhase,
+    };
+    let fixture = Fixture::start().await;
+    let mut document = Document::parse(
+        include_bytes!("../../nemoclaw-sdk/tests/fixtures/config/local.yaml").as_slice(),
+    )
+    .unwrap();
+    *document.spec.gateway.endpoint_mut() = fixture.endpoint.clone();
+    let client = OpenShell::connect(&document.spec.gateway, Arc::new(EnvironmentSecrets)).unwrap();
+    let generations = ["workspace", "provider", "sandbox"]
+        .map(|kind| (kind.into(), "a".repeat(32)))
+        .into();
+    let mut binding = None;
+    for target in targets(&document, &generations)
+        .unwrap()
+        .into_iter()
+        .filter(|target| target.kind != "agent_configuration")
+    {
+        let result = client.ensure(&target.kind, &target.values).await;
+        assert!(result.error().is_none());
+        if target.kind == "sandbox" {
+            binding = result.into_parts().0;
+        }
+    }
+    let binding = binding.unwrap();
+    let key = format!("{}/{}", binding["workspace"], binding["name"]);
+    let effects = fixture.state.lock().unwrap().effects;
+    for (message, expected) in [
+        (
+            "Effective configuration could not be activated; replace the policy or repair attached providers",
+            "replace the policy or repair attached providers",
+        ),
+        (
+            "Effective provider configuration is invalid; repair credential bindings, attached providers, or their policy layers",
+            "repair credential bindings",
+        ),
+        ("PRIVATE_SENTINEL", "inspect the sandbox configuration"),
+    ] {
+        for phase in [SandboxPhase::Starting, SandboxPhase::Ready] {
+            {
+                let mut state = fixture.state.lock().unwrap();
+                let status = state
+                    .sandboxes
+                    .get_mut(&key)
+                    .unwrap()
+                    .status
+                    .as_mut()
+                    .unwrap();
+                status.phase = phase as i32;
+                status.configuration_admission = Some(SandboxConfigurationAdmission {
+                    instance_id: "PRIVATE_SENTINEL".into(),
+                    state: ConfigurationAdmissionState::Rejected as i32,
+                    error: message.into(),
+                    ..Default::default()
+                });
+            }
+            for configure in [false, true] {
+                let error = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+                    if configure {
+                        client.configure_agent(&binding, false).await
+                    } else {
+                        client
+                            .ready(&binding, &nemoclaw_sdk::CancellationToken::new())
+                            .await
+                    }
+                })
+                .await
+                .expect("a reported configuration rejection must not wait for startup timeout")
+                .unwrap_err()
+                .into_observation()
+                .to_string();
+                assert!(error.contains("configuration rejected"), "{error}");
+                assert!(error.contains(expected), "{error}");
+                assert!(error.contains("resources retained"), "{error}");
+                assert!(!error.contains("PRIVATE_SENTINEL"), "{error}");
+            }
+            assert_eq!(fixture.state.lock().unwrap().effects, effects);
+            assert!(fixture.state.lock().unwrap().exec_calls.is_empty());
+        }
+    }
+    // Identity and access failures take precedence over a rejection reported
+    // for a substituted or unreadable sandbox.
+    let original = fixture.state.lock().unwrap().sandboxes[&key].clone();
+    for field in ["id", "owner", "generation"] {
+        let mut changed = original.clone();
+        let metadata = changed.metadata.as_mut().unwrap();
+        match field {
+            "id" => metadata.id = "other".into(),
+            "owner" => {
+                metadata
+                    .labels
+                    .insert(nemoclaw_provider::openshell::OWNER.into(), "other".into());
+            }
+            _ => {
+                metadata.labels.insert(
+                    nemoclaw_provider::openshell::GENERATION.into(),
+                    "other".into(),
+                );
+            }
+        }
+        fixture
+            .state
+            .lock()
+            .unwrap()
+            .sandboxes
+            .insert(key.clone(), changed);
+        let error = client
+            .ready(&binding, &nemoclaw_sdk::CancellationToken::new())
+            .await
+            .unwrap_err()
+            .into_observation();
+        assert_eq!(error, nemoclaw_sdk::ObservationError::BindingMismatch);
+    }
+    fixture
+        .state
+        .lock()
+        .unwrap()
+        .sandboxes
+        .insert(key.clone(), original);
+    for (code, expected) in [
+        (
+            tonic::Code::Unauthenticated,
+            nemoclaw_sdk::ObservationError::Authentication,
+        ),
+        (
+            tonic::Code::PermissionDenied,
+            nemoclaw_sdk::ObservationError::Permission,
+        ),
+        (
+            tonic::Code::Unavailable,
+            nemoclaw_sdk::ObservationError::Transport,
+        ),
+    ] {
+        fixture.state.lock().unwrap().fail_read = Some(("sandbox", code));
+        let error = client
+            .ready(&binding, &nemoclaw_sdk::CancellationToken::new())
+            .await
+            .unwrap_err()
+            .into_observation();
+        assert_eq!(error, expected);
+    }
+    fixture.state.lock().unwrap().fail_read = None;
+    // Planning must retain a nonterminal rejected sandbox so attached providers
+    // can be repaired, and teardown must remain independent of admission.
+    fixture
+        .state
+        .lock()
+        .unwrap()
+        .sandboxes
+        .get_mut(&key)
+        .unwrap()
+        .status
+        .as_mut()
+        .unwrap()
+        .phase = SandboxPhase::Starting as i32;
+    assert_eq!(
+        client.read("sandbox", &binding, false).await.unwrap(),
+        Some(binding.clone())
+    );
+    client.remove("sandbox", &binding, true).await.unwrap();
+    assert_eq!(fixture.state.lock().unwrap().delete_calls, 1);
+}

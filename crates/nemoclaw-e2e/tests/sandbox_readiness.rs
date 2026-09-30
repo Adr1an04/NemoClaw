@@ -129,6 +129,44 @@ async fn standalone_sandbox_completion_rejects_unknown_health_and_retains_bindin
         .unwrap();
     assert_ne!(observation["values"]["read_trigger"], token);
     assert_eq!(observation["values"]["ready"], true);
+    // Recheck admission independently of previously successful configuration.
+    // The gateway may reject a policy while the sandbox is still Starting.
+    {
+        let mut state = fixture.state.lock().unwrap();
+        for sandbox in state.sandboxes.values_mut() {
+            let status = sandbox.status.as_mut().unwrap();
+            status.phase = openshell_core::proto::SandboxPhase::Starting as i32;
+            status.configuration_admission =
+                Some(openshell_core::proto::SandboxConfigurationAdmission {
+                    state: openshell_core::proto::ConfigurationAdmissionState::Rejected as i32,
+                    error: "PRIVATE_SENTINEL".into(),
+                    ..Default::default()
+                });
+        }
+    }
+    run(&["plan", "-input=false", "-out=rejected.plan"], true);
+    let started = std::time::Instant::now();
+    run(&["apply", "-input=false", "rejected.plan"], false);
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    let rejected: Value = serde_json::from_slice(&run(&["show", "-json"], true)).unwrap();
+    let rejection = rejected["values"]["root_module"]["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["address"] == "data.nemoclaw_sandbox_readiness.assistant")
+        .unwrap();
+    let message = rejection["values"]["error_message"].as_str().unwrap();
+    assert!(
+        message.contains("sandbox/assistant: OpenShell configuration rejected"),
+        "{message}"
+    );
+    assert!(
+        message.contains("inspect the sandbox configuration"),
+        "{message}"
+    );
+    assert!(!message.contains("PRIVATE_SENTINEL"), "{message}");
+    assert_eq!(rejection["values"]["ready"], false);
+    assert_eq!(fixture.state.lock().unwrap().effects, effects);
     // Teardown omits observations so an unavailable runtime cannot block deletion.
     graph.as_object_mut().unwrap().remove("data");
     graph.as_object_mut().unwrap().remove("output");
