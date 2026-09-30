@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(crate) struct SelectedProvider<'a> {
     pub definition: &'a InferenceProvider,
     pub key: String,
-    path: String,
+    pub(crate) path: String,
 }
 impl<'a> SelectedProvider<'a> {
     fn new(definition: &'a InferenceProvider, sandbox: Option<&Sandbox>, path: String) -> Self {

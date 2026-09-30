@@ -10,6 +10,7 @@ mod plan;
 mod reporting;
 pub use reporting::{
     DiscoveryObservation, DiscoveryReport, DiscoveryScope, DiscoveryTarget, ResourceInventoryEntry,
+    ResourceSource,
 };
 mod runtime;
 mod timing;
@@ -95,6 +96,13 @@ pub struct OperationResult {
     pub connection: Option<DeploymentConnection>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub deferred: Vec<String>,
+    /// Known graph resources in a stage whose OpenTofu plan is not yet available.
+    /// These are not planned actions and do not contribute to `changes`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deferred_resources: Vec<String>,
+    /// Authored definition paths for opaque, scoped provider registrations.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub resource_sources: BTreeMap<String, ResourceSource>,
     /// Supplemental checks that do not make a resource plan incomplete.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unverified: Vec<String>,
@@ -112,6 +120,8 @@ impl OperationResult {
             changes,
             connection: None,
             deferred: Vec::new(),
+            deferred_resources: Vec::new(),
+            resource_sources: BTreeMap::new(),
             unverified: Vec::new(),
             retained: Vec::new(),
             health: Vec::new(),
@@ -238,6 +248,13 @@ impl Deployment {
             .await?;
         if deferred {
             let mut result = OperationResult::planned(runtime_changes);
+            result.describe_sources(&document)?;
+            result.deferred_resources = compile::targets(&document, &record.generations)?
+                .into_iter()
+                .filter(|target| !target.address.starts_with("data."))
+                .map(|target| target.address)
+                .collect();
+            result.deferred_resources.sort();
             result.connection = connection;
             result.deferred = runtime_discovery;
             discovery.credentials =
@@ -285,6 +302,7 @@ impl Deployment {
         let mut changes = runtime_changes;
         changes.extend(root_changes);
         let mut result = OperationResult::planned(changes);
+        result.describe_sources(&document)?;
         result.connection = connection;
         if !apply {
             let retained = compile::compile_teardown(

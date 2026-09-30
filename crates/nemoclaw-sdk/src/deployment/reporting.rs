@@ -18,12 +18,42 @@ pub struct ResourceInventoryEntry {
     /// Present in prior state or the refreshed plan's before value; not a health assertion.
     pub existed: bool,
     pub planned_actions: Vec<String>,
+    /// OpenTofu refresh differences, including computed metadata changes.
     pub drifted: bool,
+    /// Observed pre-apply Fabric runtime status, only for agent configuration resources.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_running: Option<bool>,
     /// The owner's teardown compiler retains this established resource.
     pub retained: bool,
     /// An established resource has an unchanged plan and no reported drift.
     pub reuse_planned: bool,
 }
+/// Authored identity of a provider whose native registration uses a scoped key.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResourceSource {
+    pub name: String,
+    pub path: String,
+}
+
+impl OperationResult {
+    pub(super) fn describe_sources(&mut self, document: &Document) -> Result<(), Error> {
+        for provider in document.selected_providers()? {
+            if provider.key.starts_with("local-") && provider.key != provider.definition.name {
+                for kind in ["provider", "provider_profile"] {
+                    self.resource_sources.insert(
+                        format!("nemoclaw_{kind}.inference_{}", provider.key),
+                        ResourceSource {
+                            name: provider.definition.name.clone(),
+                            path: provider.path.clone(),
+                        },
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 pub use crate::discovery::DiscoveryObservation;
 /// Safe, validated query inputs. This allowlist intentionally excludes specs,
 /// credentials, local credential file paths, and provider resource identity.
@@ -316,6 +346,15 @@ impl Plan {
                 existed,
                 planned_actions: change.change.actions.clone(),
                 drifted,
+                agent_running: change
+                    .address
+                    .starts_with("nemoclaw_agent_configuration.")
+                    .then(|| {
+                        change.change.before["running"]
+                            .as_str()
+                            .and_then(|value| value.parse().ok())
+                    })
+                    .flatten(),
                 retained: retained.contains(&change.address),
                 reuse_planned: existed && !drifted && change.change.actions == ["no-op"],
             });
@@ -330,6 +369,62 @@ impl Plan {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn inline_and_scoped_provider_sources_preserve_authored_names_without_values() {
+        let mut input: Value =
+            serde_saphyr::from_str(include_str!("../../tests/fixtures/config/local.yaml")).unwrap();
+        let mut provider = input["spec"]["inferenceProviders"][0].take();
+        provider["name"] = "responses".into();
+        input["spec"]
+            .as_object_mut()
+            .unwrap()
+            .remove("inferenceProviders");
+        let sandbox = &mut input["spec"]["sandboxes"][0];
+        sandbox["inferenceProviders"] = json!([provider]);
+        let route = &mut sandbox["agent"]["inference"]["routes"][0];
+        route["providerRef"] = "responses".into();
+        let document = Document::parse(input.to_string().as_bytes()).unwrap();
+        let mut result = OperationResult::planned(Vec::new());
+        result.describe_sources(&document).unwrap();
+        assert_eq!(result.resource_sources.len(), 2);
+        assert!(
+            result
+                .resource_sources
+                .values()
+                .all(|source| source.name == "responses"
+                    && source.path == "spec.sandboxes[assistant].inferenceProviders[responses]")
+        );
+        let sandbox = &mut input["spec"]["sandboxes"][0];
+        let mut provider = sandbox["inferenceProviders"][0].take();
+        sandbox
+            .as_object_mut()
+            .unwrap()
+            .remove("inferenceProviders");
+        provider["name"] = "anthro".into();
+        provider["credential"] = json!({"env":"PRIVATE_REFERENCE"});
+        provider["endpoint"] = "https://inference.example.test/v1".into();
+        let route = &mut sandbox["agent"]["inference"]["routes"][0];
+        route.as_object_mut().unwrap().remove("providerRef");
+        route["provider"] = provider;
+        let document = Document::parse(input.to_string().as_bytes()).unwrap();
+        let mut result = OperationResult::planned(Vec::new());
+        result.describe_sources(&document).unwrap();
+        assert_eq!(result.resource_sources.len(), 2);
+        assert!(
+            result
+                .resource_sources
+                .values()
+                .all(|source| source.name == "anthro"
+                    && source.path
+                        == "spec.sandboxes[assistant].agent.inference.routes[primary].provider")
+        );
+        assert!(
+            !serde_json::to_string(&result.resource_sources)
+                .unwrap()
+                .contains("PRIVATE_REFERENCE")
+        );
+    }
+
     #[test]
     fn catalog_and_apply_time_readiness_do_not_defer_resource_planning() {
         let mut report: DiscoveryReport = serde_json::from_value(json!({"observations":{

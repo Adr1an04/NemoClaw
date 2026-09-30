@@ -190,7 +190,7 @@ mod deployment;
 pub use deployment::{
     Change, Deployment, DeploymentConnection, DiscoveryObservation, DiscoveryReport,
     DiscoveryScope, DiscoveryTarget, OperationResult, Outcome, Progress, ResourceInventoryEntry,
-    StepOutcome,
+    ResourceSource, StepOutcome,
 };
 
 pub mod managed;

@@ -29,6 +29,13 @@ pub(crate) fn observation_message(error: ObservationError, sandbox: Option<&str>
     }
 }
 
+fn attribute<'a>(state: &'a State, name: &str) -> Option<&'a str> {
+    match state.get(name) {
+        Some(Value::Value(value)) => Some(value),
+        _ => None,
+    }
+}
+
 pub struct ResourceAdapter {
     definition: Definition,
     backend: Arc<dyn Backend>,
@@ -42,6 +49,37 @@ impl ResourceAdapter {
             destroying: Arc::new(AtomicBool::new(false)),
         }
     }
+    fn message(&self, error: String, name: Option<&str>, upstream: Option<&str>) -> String {
+        if self.definition.kind != "ollama_external_model" {
+            return error;
+        }
+        let name = name.unwrap_or("unknown");
+        let source = name.split_once("-ollama-proxy-").map_or_else(
+            || format!("external Ollama model/{}", name.escape_default()),
+            |(_, service)| format!("services.{}.upstream", service.escape_default()),
+        );
+        // This package accepts only local, unauthenticated HTTP upstreams.
+        // Invalid state must not echo userinfo, query strings, or fragments.
+        let endpoint = upstream
+            .and_then(|endpoint| url::Url::parse(endpoint).ok())
+            .filter(|url| {
+                url.scheme() == "http"
+                    && url.path() == "/v1"
+                    && url.port().is_some()
+                    && url.username().is_empty()
+                    && url.password().is_none()
+                    && url.query().is_none()
+                    && url.fragment().is_none()
+                    && match url.host() {
+                        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+                        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+                        _ => false,
+                    }
+            });
+        let endpoint = endpoint.map(|url| format!(" ({url})")).unwrap_or_default();
+        format!("{source}{endpoint}: {error}")
+    }
+
     fn protected_binding(&self) -> bool {
         match openshell_lifecycle(self.definition.kind) {
             Some(OpenShellLifecycle::Retained) => true,
@@ -127,14 +165,19 @@ impl ResourceAdapter {
         match result {
             Ok(()) => Some(()),
             Err(error) => {
+                let message = self.message(
+                    error.to_string(),
+                    attribute(proposed, "name"),
+                    attribute(proposed, "upstream"),
+                );
                 if self.definition.fields.contains(&"spec") {
                     diags.error(
                         "Resource planning failed",
-                        error.to_string(),
+                        message,
                         AttributePath::new("spec"),
                     );
                 } else {
-                    diags.root_error("Resource planning failed", error.to_string());
+                    diags.root_error("Resource planning failed", message);
                 }
                 None
             }
@@ -221,7 +264,11 @@ impl ResourceAdapter {
         if let Some(error) = error {
             diags.root_error(
                 "Apply incomplete",
-                observation_message(error, desired.get("name").map(String::as_str)),
+                self.message(
+                    observation_message(error, desired.get("name").map(String::as_str)),
+                    desired.get("name").map(String::as_str),
+                    desired.get("upstream").map(String::as_str),
+                ),
             );
         }
         match state {
@@ -313,11 +360,15 @@ impl Resource for ResourceAdapter {
                 private,
             )),
             Err(error) => {
-                let sandbox = state.get("name").and_then(|value| match value {
-                    Value::Value(name) => Some(name.as_str()),
-                    _ => None,
-                });
-                diags.root_error("Resource observation", observation_message(error, sandbox));
+                let name = attribute(&state, "name");
+                diags.root_error(
+                    "Resource observation",
+                    self.message(
+                        observation_message(error, name),
+                        name,
+                        attribute(&state, "upstream"),
+                    ),
+                );
                 Some((state, private))
             }
         }
@@ -381,7 +432,14 @@ impl Resource for ResourceAdapter {
             Some(OpenShellLifecycle::Retained | OpenShellLifecycle::Stateful)
         ) && !replacements.is_empty()
         {
-            diags.root_error_short("Resource replacement would discard retained identity or sandbox files; use explicit teardown and a new resource identity");
+            let name = match prior.get("name") {
+                Some(Value::Value(name)) => name.as_str(),
+                _ => "unknown",
+            };
+            diags.root_error("Resource replacement refused", format!(
+                "{}/{}: changed fields: {}. Replacement would discard retained identity or sandbox files; use explicit teardown and a new resource identity",
+                self.definition.kind, name.escape_default(), replacements.join(", "),
+            ));
             return None;
         }
         Some((

@@ -1999,3 +1999,105 @@ async fn sandbox_startup_failure_names_reason_and_guidance_and_allows_destroy() 
         assert!(fixture.state.lock().unwrap().sandboxes.is_empty());
     }
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires explicit verified NEMOCLAW_TEST_BUNDLE; isolated gateway fixture"]
+async fn scoped_provider_labels_and_stopped_runtime_plans_preserve_authored_identity() {
+    let bundle = PathBuf::from(std::env::var_os("NEMOCLAW_TEST_BUNDLE").unwrap());
+    let directory = tempfile::tempdir().unwrap();
+    let fixture = Fixture::start().await;
+    let mut input: serde_json::Value = serde_saphyr::from_str(include_str!(
+        "../../nemoclaw-sdk/tests/fixtures/config/local.yaml"
+    ))
+    .unwrap();
+    input["spec"]["gateway"]["endpoint"] = fixture.endpoint.clone().into();
+    let mut provider = input["spec"]["inferenceProviders"][0].take();
+    provider["name"] = "responses".into();
+    input["spec"]
+        .as_object_mut()
+        .unwrap()
+        .remove("inferenceProviders");
+    input["spec"]["sandboxes"][0]["inferenceProviders"] = serde_json::json!([provider]);
+    input["spec"]["sandboxes"][0]["agent"]["inference"]["routes"][0]["providerRef"] =
+        "responses".into();
+    let document = Document::parse(input.to_string().as_bytes()).unwrap();
+    let state = directory.path().join("state");
+    let input = directory.path().join("input.yaml");
+    fs::write(&input, document.yaml().unwrap()).unwrap();
+    let deployment = Deployment::new(&state, &bundle);
+    let cancel = CancellationToken::new();
+    let preview = Command::new(
+        bundle
+            .join("bin")
+            .join(nemoclaw_sdk::bundle::executable("nemoclaw")),
+    )
+    .args(["--progress", "off", "--state-dir"])
+    .arg(&state)
+    .args(["plan", "--non-interactive"])
+    .arg(&input)
+    .output()
+    .unwrap();
+    assert!(
+        preview.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preview.stderr)
+    );
+    let text = String::from_utf8(preview.stdout).unwrap();
+    assert!(
+        text.contains(
+            "provider/responses at spec.sandboxes[assistant].inferenceProviders[responses]"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("provider/local-"), "{text}");
+    assert_eq!(fixture.state.lock().unwrap().effects, 0);
+    deployment.apply(&document, &cancel).await.unwrap();
+    let effects = fixture.state.lock().unwrap().effects;
+    fixture.state.lock().unwrap().fabric_stopped = true;
+    for format in ["text", "json"] {
+        let output = Command::new(
+            bundle
+                .join("bin")
+                .join(nemoclaw_sdk::bundle::executable("nemoclaw")),
+        )
+        .args(["--progress", "off", "--state-dir"])
+        .arg(&state)
+        .args(["plan", "--non-interactive", "-o", format])
+        .arg(&input)
+        .output()
+        .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let text = String::from_utf8(output.stdout).unwrap();
+        if format == "text" {
+            assert!(text.contains("agent runtime/assistant"), "{text}");
+            assert!(
+                text.contains("Agent runtime is not running; apply restarts it."),
+                "{text}"
+            );
+        } else {
+            let result: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let sources = result["resourceSources"].as_object().unwrap();
+            assert_eq!(sources.len(), 2);
+            assert!(sources.values().all(|source| source["name"] == "responses"
+                && source["path"] == "spec.sandboxes[assistant].inferenceProviders[responses]"));
+            let resource = result["discovery"]["resources"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|resource| resource["address"] == "nemoclaw_agent_configuration.assistant")
+                .unwrap();
+            assert_eq!(resource["agentRunning"], false);
+            assert_eq!(resource["plannedActions"], serde_json::json!(["update"]));
+        }
+        assert!(fixture.state.lock().unwrap().fabric_stopped);
+        assert_eq!(fixture.state.lock().unwrap().effects, effects);
+    }
+    let repaired = deployment.apply(&document, &cancel).await.unwrap();
+    assert_eq!(repaired.changes.len(), 1);
+    assert!(!fixture.state.lock().unwrap().fabric_stopped);
+    deployment.destroy(&cancel).await.unwrap();
+}

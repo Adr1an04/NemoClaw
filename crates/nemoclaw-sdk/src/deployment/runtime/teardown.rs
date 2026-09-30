@@ -79,6 +79,7 @@ impl Deployment {
             })
             .transpose()?;
         let mut result = OperationResult::planned(Vec::new());
+        result.describe_sources(&record.document)?;
         result.retained.extend(root_graph.retained.iter().cloned());
         if let Some(graph) = &runtime_graph {
             result.retained.extend(graph.retained.iter().cloned());

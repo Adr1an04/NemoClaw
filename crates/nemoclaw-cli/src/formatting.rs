@@ -150,7 +150,33 @@ pub(crate) fn resource_label(address: &str) -> String {
         "nemoclaw_gateway_storage.runtime" => "gateway storage".to_owned(),
         "nemoclaw_workspace.deployment" => "OpenShell workspace".to_owned(),
         _ => {
+            // Search registration hashes distinguish credentials in state. The
+            // default label names the integration; verbose retains its address.
+            if address.starts_with("nemoclaw_provider.web_search_tavily_") {
+                return "web search provider/tavily".into();
+            }
+            if let Some(name) = address
+                .strip_prefix("nemoclaw_inference_storage.inference_")
+                .and_then(|name| name.strip_suffix("_auth"))
+            {
+                return terminal_text(&format!("inference credentials/{name}"));
+            }
             let mappings = [
+                ("nemoclaw_agent_configuration.", "agent runtime/"),
+                (
+                    "nemoclaw_provider_profile.web_search_",
+                    "web search profile/",
+                ),
+                ("nemoclaw_ollama_external_model.", "external Ollama model/"),
+                ("nemoclaw_ollama_proxy_storage.", "proxy credentials/"),
+                ("docker_container.ollama_proxy_", "ollama proxy/"),
+                ("docker_container.ollama_service_", "ollama/"),
+                ("docker_volume.ollama_service_storage_", "model cache/"),
+                ("nemoclaw_ollama_service_storage.", "ollama credentials/"),
+                (
+                    "nemoclaw_inference_storage.inference_",
+                    "inference credentials/",
+                ),
                 (
                     "docker_container.inference_service_inference_",
                     "inference/",
@@ -196,6 +222,23 @@ fn styled_action(actions: &[String], palette: Palette) -> String {
         Tone::Accent
     };
     palette.paint(&action_label(actions), tone)
+}
+
+fn result_resource_label(result: &OperationResult, address: &str) -> String {
+    if let Some(source) = result.resource_sources.get(address) {
+        let kind = if address.starts_with("nemoclaw_provider_profile.") {
+            "provider profile"
+        } else {
+            "provider"
+        };
+        format!(
+            "{kind}/{} at {}",
+            terminal_text(&source.name),
+            terminal_text(&source.path)
+        )
+    } else {
+        resource_label(address)
+    }
 }
 
 fn operation(result: &OperationResult, context: &RenderContext) -> String {
@@ -262,10 +305,17 @@ fn operation(result: &OperationResult, context: &RenderContext) -> String {
                 continue;
             }
             let action = styled_action(&change.actions, context.output_palette);
-            let label = resource_label(&change.resource);
+            let label = result_resource_label(result, &change.resource);
             output.push_str(&format!("  {action}  {label}\n"));
             if context.verbose && label != change.resource {
                 output.push_str(&format!("    {}\n", terminal_text(&change.resource)));
+            }
+            if planned
+                && result.discovery.resources.iter().any(|resource| {
+                    resource.address == change.resource && resource.agent_running == Some(false)
+                })
+            {
+                output.push_str("    Agent runtime is not running; apply restarts it.\n");
             }
             if change.resource.starts_with("nemoclaw_sandbox.")
                 && change.actions.iter().any(|action| action == "delete")
@@ -300,19 +350,43 @@ fn operation(result: &OperationResult, context: &RenderContext) -> String {
             ));
         }
     }
+    if !result.deferred_resources.is_empty() {
+        output.push_str("\nResources awaiting a complete plan:\n");
+        let mut images = 0;
+        for address in &result.deferred_resources {
+            if !context.verbose && address.starts_with("docker_image.") {
+                images += 1;
+                continue;
+            }
+            output.push_str(&format!("  {}\n", result_resource_label(result, address)));
+            if context.verbose {
+                output.push_str(&format!("    {}\n", terminal_text(address)));
+            }
+        }
+        if images > 0 {
+            output.push_str(&format!(
+                "  {images} image binding{}\n",
+                if images == 1 { "" } else { "s" }
+            ));
+        }
+    }
     if planned && !result.discovery.is_empty() {
         output.push_str("\nDiscovery:\n");
         if !result.discovery.resources.is_empty() {
             let resources = &result.discovery.resources;
+            let established = resources.iter().filter(|resource| resource.existed).count();
+            let unchanged = resources
+                .iter()
+                .filter(|resource| resource.existed && resource.planned_actions == ["no-op"])
+                .count();
             output.push_str(&format!(
-                "  Resources: {} established; {} unchanged; {} with drift.\n",
-                resources.iter().filter(|resource| resource.existed).count(),
-                resources
-                    .iter()
-                    .filter(|resource| resource.reuse_planned)
-                    .count(),
-                resources.iter().filter(|resource| resource.drifted).count()
+                "  Resources: {established} established ({unchanged} unchanged, {} with planned changes); {} new.\n",
+                established - unchanged, resources.len() - established,
             ));
+            let refreshed = resources.iter().filter(|resource| resource.drifted).count();
+            if refreshed > 0 {
+                output.push_str(&format!("  Refresh differences: {refreshed} resource{}; may include computed metadata.\n", if refreshed == 1 { "" } else { "s" }));
+            }
         }
         let catalogs: Vec<_> = result
             .discovery
@@ -647,6 +721,57 @@ mod tests {
     }
 
     #[test]
+    fn resource_results_name_authored_sources_and_separate_deferred_work() {
+        let result = json!({"outcome":"planned", "changes":[
+            {"resource":"nemoclaw_agent_configuration.host", "actions":["update"]},
+            {"resource":"nemoclaw_provider.inference_local-1234", "actions":["update"]},
+            {"resource":"nemoclaw_provider.web_search_tavily_1234", "actions":["create"]},
+            {"resource":"nemoclaw_provider_profile.web_search_tavily", "actions":["create"]},
+            {"resource":"nemoclaw_inference_storage.inference_tiny_auth", "actions":["create"]}
+        ], "resourceSources": {
+            "nemoclaw_provider.inference_local-1234":{"name":"responses", "path":"spec.sandboxes[host].inferenceProviders[responses]"}
+        }, "deferred":["Gateway is required"], "deferredResources":[
+            "docker_container.ollama_proxy_local", "nemoclaw_ollama_external_model.local", "nemoclaw_ollama_proxy_storage.local", "docker_image.image_1234"
+        ], "discovery":{"resources":[
+            {"address":"nemoclaw_agent_configuration.host", "scope":"deployment", "existed":true, "plannedActions":["update"], "drifted":true, "retained":false, "reusePlanned":false, "agentRunning":false},
+            {"address":"nemoclaw_provider.inference_local-1234", "scope":"deployment", "existed":true, "plannedActions":["update"], "drifted":false, "retained":false, "reusePlanned":false},
+            {"address":"docker_container.managed_gateway_runtime", "scope":"runtime", "existed":true, "plannedActions":["no-op"], "drifted":true, "retained":false, "reusePlanned":false}
+        ]}});
+        let text = render(&["nemoclaw", "plan", "spark.yaml"], result.clone());
+        for expected in [
+            "agent runtime/host",
+            "provider/responses at spec.sandboxes[host].inferenceProviders[responses]",
+            "web search provider/tavily",
+            "web search profile/tavily",
+            "inference credentials/tiny",
+            "ollama proxy/local",
+            "external Ollama model/local",
+            "proxy credentials/local",
+            "Agent runtime is not running; apply restarts it.",
+            "Resources: 3 established (1 unchanged, 2 with planned changes); 0 new.",
+            "Refresh differences: 2 resources; may include computed metadata.",
+            "Resources awaiting a complete plan:",
+        ] {
+            assert!(text.contains(expected), "missing {expected}: {text}");
+        }
+        assert!(!text.contains("1234"), "{text}");
+        assert!(!text.contains("3 unchanged"));
+        let verbose = render(
+            &["nemoclaw", "plan", "spark.yaml", "--verbose"],
+            result.clone(),
+        );
+        assert!(verbose.contains("nemoclaw_provider.inference_local-1234"));
+        let json: Value = serde_json::from_str(&render(
+            &["nemoclaw", "plan", "spark.yaml", "-o", "json"],
+            result.clone(),
+        ))
+        .unwrap();
+        assert_eq!(json["deferredResources"], result["deferredResources"]);
+        assert_eq!(json["resourceSources"], result["resourceSources"]);
+        assert_eq!(json["discovery"]["resources"][0]["agentRunning"], false);
+    }
+
+    #[test]
     fn creation_labels_do_not_imply_sandbox_deletion_or_retention() {
         let result = json!({"outcome":"planned","changes":[
             {"resource":"nemoclaw_workspace.deployment","actions":["create"]},
@@ -668,7 +793,7 @@ mod tests {
         }});
         let text = render(&["nemoclaw", "plan", "spark.yaml"], result.clone());
         assert!(
-            text.contains("Resources: 1 established; 1 unchanged; 0 with drift"),
+            text.contains("Resources: 1 established (1 unchanged, 0 with planned changes); 0 new."),
             "{text}"
         );
         assert!(
