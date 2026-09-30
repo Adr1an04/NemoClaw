@@ -7,6 +7,7 @@
 Fabric owns the adapter implementations, native schemas, and configuration mapping installed by these recipes.
 NemoClaw preserves the upstream descriptors.
 The pinned OpenClaw adapter has a [documented configuration-reconciliation patch](fabric/OPENCLAW-NOTICE.md); other adapter implementations are unchanged.
+The Fabric runtime wheel has a [documented lifecycle error-code patch](fabric/FABRIC-ERROR-NOTICE.md) that preserves structured native codes through its Python SDK.
 Upstream notices remain in installed wheels and the retained source archive under `/opt/nemoclaw/source/`.
 See [Fabric's license](fabric/FABRIC-LICENSE) and the notices beside its adapter sources.
 

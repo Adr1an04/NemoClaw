@@ -28,6 +28,7 @@ The subsequent [managed Podman qualification](rust-managed-podman-linux-arm64.md
 
 | Behavior | Tests and Results |
 |---|---|
+| Fabric runtime error codes, named sandbox failures, and retained-state recovery | [Linux ARM64 runtime failure qualification](fabric-runtime-failure-linux-arm64.md) |
 | Named Fabric compatibility rejections, safe field details, and Pi model-token overrides | [Linux ARM64 compatibility diagnostics](fabric-compatibility-linux-arm64.md) |
 | Managed Docker gateway exit diagnostics, bounded readiness, and recovery | [Linux ARM64 gateway startup qualification](gateway-startup-linux-arm64.md) |
 | Runtime policy rejection, safe sandbox diagnostics, retained bindings, recovery, and destroy | [Linux ARM64 policy rejection qualification](policy-rejection-linux-arm64.md) |
