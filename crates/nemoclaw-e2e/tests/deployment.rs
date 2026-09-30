@@ -1640,7 +1640,12 @@ async fn cli_redaction_preserves_failures_and_recovery_with_short_and_colliding_
     fixture.state.lock().unwrap().configuration_error = Some(serde_json::json!({
         "error": {"stage":"start", "code":"lifecycle_adapter_start_failed", "runtime_state":"unavailable", "message":"native-secret-must-not-escape"}
     }));
-    for secret in ["a", "z", "lifecycle_adapter_start_failed"] {
+    for secret in [
+        "a",
+        "z",
+        "lifecycle_adapter_start_failed",
+        "inert-credential-for-context-check",
+    ] {
         for format in ["text", "json"] {
             let failed = invoke("apply", format, secret);
             assert_eq!(failed.status.code(), Some(1));
@@ -1659,13 +1664,23 @@ async fn cli_redaction_preserves_failures_and_recovery_with_short_and_colliding_
                     !message.contains("[redacted]"),
                     "short-value character matches must not escape"
                 );
-            } else {
+            } else if secret == "lifecycle_adapter_start_failed" {
                 assert!(message.contains("[redacted]"), "{message}");
                 assert!(
                     message.contains("agent runtime is unavailable"),
                     "{message}"
                 );
                 assert!(!message.contains(secret));
+            } else {
+                assert!(message.contains("sandbox/assistant"), "{message}");
+                assert!(
+                    message.contains("lifecycle_adapter_start_failed"),
+                    "{message}"
+                );
+                assert!(
+                    message.contains("agent runtime is unavailable"),
+                    "{message}"
+                );
             }
             assert!(!message.contains("[[redacted]]"));
             assert!(!stdout.contains("native-secret-must-not-escape"));
@@ -1802,5 +1817,77 @@ async fn rejected_policy_fails_promptly_with_context_and_allows_recovery_or_dest
         deployment.destroy(&cancel).await.unwrap();
         assert!(fixture.state.lock().unwrap().sandboxes.is_empty());
         assert_eq!(fixture.state.lock().unwrap().delete_calls, 1);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires explicit verified NEMOCLAW_TEST_BUNDLE; isolated gateway fixture"]
+async fn pi_start_failure_names_the_sandbox_in_cli_text_and_json_and_allows_destroy() {
+    let bundle = PathBuf::from(std::env::var_os("NEMOCLAW_TEST_BUNDLE").unwrap());
+    for format in ["text", "json"] {
+        let directory = tempfile::tempdir().unwrap();
+        let fixture = Fixture::start().await;
+        let mut input: serde_json::Value = serde_saphyr::from_str(include_str!(
+            "../../nemoclaw-sdk/tests/fixtures/config/local.yaml"
+        ))
+        .unwrap();
+        input["spec"]["gateway"]["endpoint"] = fixture.endpoint.clone().into();
+        input["spec"]["sandboxes"][0]["name"] = "coder".into();
+        input["spec"]["sandboxes"][0]["harness"]["kind"] = "nvidia.fabric.pi".into();
+        let document = Document::parse(input.to_string().as_bytes()).unwrap();
+        let input = directory.path().join("input.yaml");
+        fs::write(&input, document.yaml().unwrap()).unwrap();
+        let state = directory.path().join("state");
+        fixture.state.lock().unwrap().configuration_error = Some(serde_json::json!({
+            "error": {"stage":"start", "code":"pi_model_unknown", "runtime_state":"unavailable", "message":"PRIVATE_SENTINEL", "details":{"token":"PRIVATE_SENTINEL"}}
+        }));
+        let invoke = |operation: &str| {
+            let mut command = Command::new(
+                bundle
+                    .join("bin")
+                    .join(nemoclaw_sdk::bundle::executable("nemoclaw")),
+            );
+            command
+                .arg("--bundle")
+                .arg(&bundle)
+                .arg("--state-dir")
+                .arg(&state)
+                .args(["--progress", "off", operation, "-o", format]);
+            if operation == "apply" {
+                command.arg(&input).arg("--non-interactive");
+            }
+            command.output().unwrap()
+        };
+        let failed = invoke("apply");
+        assert_eq!(failed.status.code(), Some(1));
+        let stdout = String::from_utf8(failed.stdout).unwrap();
+        let stderr = String::from_utf8(failed.stderr).unwrap();
+        let message = if format == "json" {
+            let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+            assert_eq!(report["outcome"], "failed");
+            report["error"]["message"].as_str().unwrap().to_owned()
+        } else {
+            stderr.clone()
+        };
+        for expected in [
+            "sandbox/coder",
+            "start",
+            "pi_model_unknown",
+            "agent runtime is unavailable",
+            "resources retained",
+        ] {
+            assert!(message.contains(expected), "{message}");
+        }
+        assert!(!stdout.contains("PRIVATE_SENTINEL") && !stderr.contains("PRIVATE_SENTINEL"));
+        assert_eq!(fixture.state.lock().unwrap().sandboxes.len(), 1);
+        assert!(state.join("terraform.tfstate").exists());
+        let destroyed = invoke("destroy");
+        assert!(
+            destroyed.status.success(),
+            "{} {}",
+            String::from_utf8_lossy(&destroyed.stdout),
+            String::from_utf8_lossy(&destroyed.stderr)
+        );
+        assert!(fixture.state.lock().unwrap().sandboxes.is_empty());
     }
 }

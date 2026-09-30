@@ -90,7 +90,7 @@ class OpenClawReconfiguration(unittest.IsolatedAsyncioTestCase):
                     host.failure(failure.exception)["error"],
                     {
                         "stage": "start",
-                        "code": "fabric_start_failed",
+                        "code": "lifecycle_adapter_start_failed",
                         "runtime_state": "unavailable",
                     },
                 )

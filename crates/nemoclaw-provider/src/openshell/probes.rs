@@ -83,6 +83,8 @@ fn configuration_failure(output: &[u8]) -> ObservationError {
         _ => "unknown",
     };
     let code = match error["code"].as_str() {
+        Some("pi_model_unknown") => "pi_model_unknown",
+        Some("pi_model_invalid") => "pi_model_invalid",
         Some("lifecycle_adapter_start_failed") => "lifecycle_adapter_start_failed",
         Some("lifecycle_adapter_stop_failed") => "lifecycle_adapter_stop_failed",
         Some("lifecycle_adapter_invoke_failed") => "lifecycle_adapter_invoke_failed",
@@ -325,6 +327,21 @@ mod tests {
                 stage: "unknown", code: "fabric_configuration_failed", runtime_state: "unknown",
             });
         }
+    }
+
+    #[test]
+    fn pi_model_failure_keeps_the_code_and_named_sandbox_without_native_details() {
+        let error = super::configuration_failure(br#"{"error":{"stage":"start","code":"pi_model_unknown","runtime_state":"unavailable","message":"PRIVATE_SENTINEL"}}"#);
+        let message = crate::resource::observation_message(error, Some("coder"));
+        for expected in [
+            "sandbox/coder",
+            "pi_model_unknown",
+            "start",
+            "resources retained",
+        ] {
+            assert!(message.contains(expected), "{message}");
+        }
+        assert!(!message.contains("PRIVATE_SENTINEL"));
     }
 
     use super::*;

@@ -14,7 +14,11 @@ use tf_provider::value::{Value, ValueEmpty};
 use tf_provider::{AttributePath, Diagnostics, Resource};
 
 pub(crate) fn observation_message(error: ObservationError, sandbox: Option<&str>) -> String {
-    if matches!(error, ObservationError::SandboxConfigurationRejected { .. }) {
+    if matches!(
+        error,
+        ObservationError::SandboxConfigurationRejected { .. }
+            | ObservationError::FabricConfiguration { .. }
+    ) {
         format!(
             "sandbox/{}: {error}",
             sandbox.unwrap_or("unknown").escape_default()

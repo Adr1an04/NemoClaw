@@ -107,6 +107,52 @@ class RuntimeLifecycle(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(status, 2)
             self.assertEqual(json.loads(output.getvalue()), failure)
 
+    async def test_native_lifecycle_code_survives_the_real_sdk_start_wrapper(self):
+        config = {"metadata": {"name": "main"}, "harness": {"adapter_id": "vendor.new"}}
+        native_error = RuntimeError("PRIVATE_NATIVE_MESSAGE")
+        native_error.code = "pi_model_unknown"
+        native = SimpleNamespace(start_runtime=Mock(side_effect=native_error))
+        with tempfile.TemporaryDirectory() as directory:
+            host = RuntimeHost("main", Path(directory))
+            with (
+                patch.object(
+                    host.fabric, "plan", return_value=SimpleNamespace(to_mapping=lambda: {})
+                ),
+                patch.object(host.fabric, "_require_native_module", return_value=native),
+            ):
+                with self.assertRaises(FabricRuntimeError) as failed:
+                    await host.configure(config)
+            self.assertEqual(
+                host.failure(failed.exception),
+                {
+                    "error": {
+                        "stage": "start",
+                        "code": "pi_model_unknown",
+                        "runtime_state": "unavailable",
+                    }
+                },
+            )
+
+    async def test_pi_model_failure_preserves_known_code_without_native_details(self):
+        with tempfile.TemporaryDirectory() as directory:
+            host = RuntimeHost("main", Path(directory))
+            error = FabricRuntimeError(
+                "PRIVATE_SENTINEL",
+                stage="start",
+                code="pi_model_unknown",
+                details={"token": "PRIVATE_SENTINEL"},
+            )
+            self.assertEqual(
+                host.failure(error),
+                {
+                    "error": {
+                        "stage": "start",
+                        "code": "pi_model_unknown",
+                        "runtime_state": "unavailable",
+                    }
+                },
+            )
+
     async def test_failed_restart_reports_unavailable_without_exposing_exception_details(self):
         config = {"metadata": {"name": "main"}, "harness": {"adapter_id": "vendor.new"}}
         runtime = SimpleNamespace(runtime_id="owned", status="active", stop=AsyncMock())
@@ -200,6 +246,55 @@ class RuntimeLifecycle(unittest.IsolatedAsyncioTestCase):
     os.environ.get("NEMOCLAW_TEST_FABRIC_DESCRIPTOR"), "requires installed Fabric-only fixture"
 )
 class InstalledAdapterExecution(unittest.IsolatedAsyncioTestCase):
+    async def test_native_adapter_failure_survives_every_error_boundary_without_details(self):
+        import importlib.util
+
+        descriptor = json.loads(Path(os.environ["NEMOCLAW_TEST_FABRIC_DESCRIPTOR"]).read_text())
+        original = Path(importlib.util.find_spec("fabric_discovery_fixture").origin).read_text()
+        for code, failure in (
+            (
+                "pi_model_unknown",
+                'raise lifecycle.LifecycleError("pi_model_unknown", "PRIVATE_SENTINEL", metadata={"token": "PRIVATE_SENTINEL"})',
+            ),
+            ("lifecycle_adapter_start_failed", 'raise ValueError("PRIVATE_SENTINEL")'),
+        ):
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                replaced = original.replace('self.config = payload["config"]', failure)
+                self.assertNotEqual(original, replaced)
+                (root / "fabric_discovery_fixture.py").write_text(
+                    "# NeMo Fabric fixture at 24f068c895e5cbc30286bc743498be4e5014d658.\n"
+                    "# 2026-09-29: replace startup with a controlled error for this test.\n"
+                    + replaced
+                )
+                config = {
+                    "metadata": {"name": "main"},
+                    "harness": {
+                        "adapter_id": descriptor["adapter_id"],
+                        "settings": {"mode": "advanced", "budget": 4},
+                    },
+                    "models": {"default": {"provider": "openai", "model": "fixture-model"}},
+                    "environment": {"workspace": directory},
+                    "runtime": {"artifacts": directory},
+                }
+                host = RuntimeHost("main", root)
+                try:
+                    with patch.dict(os.environ, {"PYTHONPATH": directory}):
+                        with self.assertRaises(FabricRuntimeError) as failed:
+                            await host.configure(config)
+                    self.assertEqual(
+                        host.failure(failed.exception),
+                        {
+                            "error": {
+                                "stage": "start",
+                                "code": code,
+                                "runtime_state": "unavailable",
+                            }
+                        },
+                    )
+                finally:
+                    await host.stop()
+
     async def test_installed_discovery_settings_reach_actual_fabric_execution(self):
         from catalog import snapshot
 

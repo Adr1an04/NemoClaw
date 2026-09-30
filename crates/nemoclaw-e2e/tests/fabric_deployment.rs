@@ -437,6 +437,7 @@ async fn failed_configuration_reports_safe_runtime_state_and_recovers_without_re
         .unwrap_err()
         .to_string();
     assert!(error.contains("lifecycle_adapter_start_failed"), "{error}");
+    assert!(error.contains("sandbox/assistant"), "{error}");
     assert!(error.contains("agent runtime is unavailable"), "{error}");
     assert!(!error.contains("native-secret"), "{error}");
     assert!(fixture.state.lock().unwrap().fabric_stopped);

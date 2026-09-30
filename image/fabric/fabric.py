@@ -23,6 +23,8 @@ def failure_fields(stage=None, code=None, runtime_state=None):
     if stage not in ("validate", "start", "stop", "invoke"):
         stage = "unknown"
     if code not in (
+        "pi_model_unknown",
+        "pi_model_invalid",
         "lifecycle_adapter_start_failed",
         "lifecycle_adapter_stop_failed",
         "lifecycle_adapter_invoke_failed",
