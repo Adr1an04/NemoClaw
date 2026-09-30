@@ -323,3 +323,31 @@ fn service_readiness_follows_provider_identity_and_is_fresh_on_unchanged_apply()
     assert_eq!(readiness["read_trigger"], "${timestamp() != \"\"}");
     assert!(readiness["spec"].is_string());
 }
+
+#[test]
+fn gateway_readiness_observes_the_exact_docker_provider_container() {
+    let document =
+        Document::parse(include_bytes!("fixtures/config/spark.yaml").as_slice()).unwrap();
+    let generations = ["managed_gateway", "inference_service"]
+        .map(|kind| (kind.into(), "b".repeat(32)))
+        .into();
+    let graph = compile_runtime(&document, &generations, "0.1.0").unwrap();
+    let readiness = &graph["data"]["nemoclaw_gateway_capabilities"]["current"];
+    assert_eq!(
+        readiness["container_id"],
+        "${docker_container.managed_gateway_runtime.id}"
+    );
+    let spec: nemoclaw_sdk::managed::Spec =
+        serde_json::from_str(readiness["managed_spec"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        spec.name,
+        graph["resource"]["docker_container"]["managed_gateway_runtime"]["name"]
+    );
+    assert_eq!(spec.owner, document.metadata.uid);
+    let podman =
+        Document::parse(include_bytes!("../../../examples/managed-podman.yaml").as_slice())
+            .unwrap();
+    let graph = compile_runtime(&podman, &generations, "0.1.0").unwrap();
+    assert!(graph["data"]["nemoclaw_gateway_capabilities"]["current"]["container_id"].is_null());
+    assert!(graph["data"]["nemoclaw_gateway_capabilities"]["current"]["managed_spec"].is_null());
+}

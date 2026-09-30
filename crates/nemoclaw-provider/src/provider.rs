@@ -527,3 +527,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "gateway_tests.rs"]
+mod gateway_tests;
