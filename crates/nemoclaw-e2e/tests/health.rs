@@ -292,7 +292,7 @@ async fn relocated_image_owns_bridge_commands_environment_and_staged_files() {
         "config_json".into(),
         serde_json::json!({"metadata":{"name":name}}).to_string(),
     );
-    let result = client.configure_agent(&binding, false).await;
+    let result = client.configure_agent(&binding).await;
     let calls = fixture.state.lock().unwrap().exec_calls.clone();
     assert_eq!(
         calls[0],
@@ -349,6 +349,15 @@ async fn relocated_image_owns_bridge_commands_environment_and_staged_files() {
         );
     }
     assert_eq!(fixture.state.lock().unwrap().exec_calls.len(), calls.len());
+    let snapshot = client.agent_snapshot(&binding).await.unwrap();
+    assert_eq!(snapshot.generation.as_deref(), Some("fixture:1"));
+    assert_eq!(snapshot.runtime_state, "running");
+    assert!(
+        snapshot
+            .runtime_id
+            .as_deref()
+            .is_some_and(|id| !id.is_empty())
+    );
 }
 
 #[tokio::test]
@@ -376,7 +385,7 @@ async fn staging_uses_writable_tmpdir_when_home_has_only_read_access() {
         })
         .to_string(),
     );
-    client.configure_agent(&binding, false).await.unwrap();
+    client.configure_agent(&binding).await.unwrap();
     let state = fixture.state.lock().unwrap();
     let calls = &state.exec_calls;
     assert_eq!(calls.len(), 4);
