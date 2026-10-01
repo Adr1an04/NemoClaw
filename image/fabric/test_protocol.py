@@ -28,7 +28,7 @@ class ProtocolLifecycle(unittest.IsolatedAsyncioTestCase):
             runtime_id="owned", status="active", stop=AsyncMock(), invoke=AsyncMock()
         )
         self.api = SimpleNamespace(plan=Mock(), start_runtime=AsyncMock(return_value=self.runtime))
-        self.patch = patch("fabric.Fabric", return_value=self.api)
+        self.patch = patch("backend.Fabric", return_value=self.api)
         self.patch.start()
         self.addCleanup(self.patch.stop)
         self.host = fabric.RuntimeHost("main")
@@ -567,7 +567,7 @@ class HostOwnership(unittest.IsolatedAsyncioTestCase):
                     "def plan(*args, **kwargs):",
                     "    (root / 'entered').touch()",
                     "    threading.Event().wait()",
-                    "fabric.Fabric = lambda: SimpleNamespace(plan=plan)",
+                    "__import__('backend').Fabric = lambda: SimpleNamespace(plan=plan)",
                     "fabric.serve = functools.partial(fabric.serve, directory=root)",
                     "raise SystemExit(fabric.main(['serve', '--agent', 'main']))",
                 ]
