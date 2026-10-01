@@ -80,12 +80,12 @@ For the full Linux ARM64 checks, run from the repository root:
 
 ```sh
 python3 -B -m unittest discover -s image -p test_builds.py
-AGENT_PLATFORM=linux/arm64 docker buildx bake --check agents ollama-proxy
+AGENT_PLATFORM=linux/arm64 docker buildx bake --check dummy agents ollama-proxy
 AGENT_PLATFORM=linux/arm64 docker buildx bake check
 ```
 
 The first command checks Bake's public target selection without a Docker daemon or prebuilt source tree.
-Docker checks the selected build instructions; the `check` group runs Ruff lint/format checks and generic runtime behavior tests against Fabric's installed fixture adapter.
+Docker checks the selected build instructions; the `check` group runs Ruff lint/format checks, reference-backend tests without Fabric, and generic runtime behavior tests against Fabric's installed fixture adapter.
 Behavior tests run with networking disabled; downloading build dependencies still needs network access.
 Checks produce build cache entries and no tagged runtime images.
 
@@ -101,7 +101,10 @@ The scope includes image Python and retained integration fixtures.
 Native adapter implementation and its behavioral tests live in Fabric and use Fabric's checks.
 
 The [image workflow](../.github/workflows/images.yml) builds the selected platform's agent images plus the proxy, verifies retained source hashes, and checks installed discovery metadata.
-It also qualifies the installed OpenClaw, Hermes, and Pi adapters against isolated local inference, on platforms with those image targets.
+It first builds and qualifies the separate dummy image, then runs the same [command contract suite](../image/test_agent_contract.py) against every selected agent image.
+Use the [reference image procedure](build.md#reference-contract-image) to run that suite locally against explicit image references.
+The suite tests real entrypoints, file inputs, exit codes, capability labels, standalone validation, host startup and shutdown, and retained files; the dummy also exercises successful configuration, health, invocation, and preparation.
+The workflow separately qualifies the installed OpenClaw, Hermes, and Pi adapters against isolated local inference, on platforms with those image targets.
 Rust- or documentation-only pushes skip that image build; their schema and descriptor consumption tests remain in the Rust suite.
 These checks use no live credentials and do not establish GPU inference or live OpenShell deployment behavior.
 
