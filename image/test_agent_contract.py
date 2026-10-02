@@ -54,10 +54,12 @@ class AgentContract(unittest.TestCase):
         path.chmod(0o600)
         return str(path)
 
-    def call(self, operation, *flags):
+    def call(self, operation, *flags, stdin="PRIVATE_STDIN_MUST_NOT_BE_READ"):
+        # Text is written to a pipe; a descriptor, such as a terminal, is attached directly.
+        source = {"input": stdin} if isinstance(stdin, str) else {"stdin": stdin}
         output = subprocess.run(
             [*COMMAND, operation, "--agent", NAME, *flags],
-            input="PRIVATE_STDIN_MUST_NOT_BE_READ",
+            **source,
             capture_output=True,
             text=True,
             timeout=20,
@@ -84,6 +86,7 @@ class AgentContract(unittest.TestCase):
         )
         health = advertised["health_checks"]
         self.assertEqual(health, ["live", "active", "ready"][: len(health)])
+        self.assertEqual(advertised["input_sources"], ["file", "stdin"])
 
     def test_validation_without_a_host_reports_owner_rejection(self):
         config = self.file(
@@ -108,6 +111,22 @@ class AgentContract(unittest.TestCase):
             self.assertEqual(result["status"], status)
             self.assertFalse(result["changed"])
             self.assertEqual(result["error"]["effects"], "none")
+
+    def test_dash_reads_stdin_and_rejects_unusable_stdin_without_effects(self):
+        invalid = {"metadata": {"name": NAME}, "harness": {"adapter_id": 7}}
+        result = self.call("validate", "--config", "-", stdin=json.dumps(invalid))
+        self.assertEqual(result["status"], "failed")
+        self.assertIs(result["result"]["valid"], False)
+        streamed = self.call("invoke", "--input", "-", stdin=json.dumps({"stream": True}))
+        self.assertEqual(streamed["status"], "unsupported")
+        controller, terminal = os.openpty()
+        self.addCleanup(os.close, controller)
+        self.addCleanup(os.close, terminal)
+        for stdin in ("PRIVATE", terminal):
+            result = self.call("validate", "--config", "-", stdin=stdin)
+            self.assertEqual(result["error"]["code"], "invalid_input")
+            self.assertEqual(result["error"]["effects"], "none")
+            self.assertFalse(result["changed"])
 
     def test_host_waits_for_configuration_and_retains_state_on_shutdown(self):
         sentinel = ROOT / "retained.txt"
@@ -147,14 +166,14 @@ class AgentContract(unittest.TestCase):
         stale = self.call("configure", *flags)
         self.assertEqual(stale["error"]["code"], "stale_generation")
         flags[-1] = state["generation"]
-        same = self.call("configure", *flags)
+        same = self.call("configure", "--config", "-", *flags[2:], stdin=json.dumps(CONFIG))
         self.assertFalse(same["changed"])
         self.assertEqual(same["result"], state)
         checked = self.call("check", "--ready")
         self.assertEqual(checked["status"], "succeeded")
         self.assertEqual(checked["result"]["runtime_id"], state["runtime_id"])
         self.assertEqual(len(checked["result"]["health"]["checks"]), 3)
-        invoked = self.call("invoke", "--input", self.file("input.json", {"message": "hello"}))
+        invoked = self.call("invoke", "--input", "-", stdin=json.dumps({"message": "hello"}))
         self.assertIsNone(invoked["changed"])
         self.assertEqual(invoked["result"]["fabric_result"]["output"], {"message": "hello"})
         prepared = self.call("prepare", *flags)

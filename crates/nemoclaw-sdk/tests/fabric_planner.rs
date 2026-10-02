@@ -247,6 +247,10 @@ fn image_compatibility_requires_a_matching_bridge_contract() {
     assert_eq!(status(&raw), Support::Unknown);
     raw["bridge"] = bridge.clone();
     assert_eq!(status(&raw), Support::Supported);
+    // Later bridge fields are additive within interface version 1.
+    raw["bridge"]["input_sources"] = json!(["file", "stdin"]);
+    raw["bridge"]["future_capability"] = json!({"any": "shape"});
+    assert_eq!(status(&raw), Support::Supported);
     raw["bridge"]["interface_version"] = 2.into();
     assert_eq!(status(&raw), Support::Unknown);
     raw["bridge"] = bridge.clone();

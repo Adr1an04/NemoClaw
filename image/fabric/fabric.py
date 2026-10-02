@@ -28,6 +28,7 @@ MUTATIONS = ("prepare", "configure")
 MESSAGES = {
     "invalid_request": "The request is invalid.",
     "invalid_file": "The input file must contain one bounded UTF-8 JSON object.",
+    "invalid_input": "Standard input must be a pipe or file with one bounded UTF-8 JSON object.",
     "wrong_agent": "The request does not identify this agent.",
     "stale_generation": "The host generation has changed; observe state again.",
     "fabric_health_unsupported": "This Fabric revision does not support runtime health checks.",
@@ -141,6 +142,19 @@ def read_object(path):
         raise ProtocolError("invalid_file") from error
 
 
+def read_stdin():
+    try:
+        # Stdin is read only when a flag names it, never from a terminal that waits for a person.
+        if sys.stdin is None or sys.stdin.isatty():
+            raise ValueError("stdin is unavailable or a terminal")
+        encoded = sys.stdin.buffer.read(REQUEST_LIMIT + 1)
+        if len(encoded) > REQUEST_LIMIT:
+            raise ValueError("stdin exceeds limit")
+        return decode_object(encoded)
+    except (OSError, ValueError, RecursionError) as error:
+        raise ProtocolError("invalid_input") from error
+
+
 def fabric_revision():
     try:
         revision = read_object(PROVENANCE).get("fabric_revision")
@@ -233,7 +247,8 @@ def parse_command(arguments):
     request = {"operation": operation, "agent": flags["--agent"]}
     for flag, field in (("--config", "config"), ("--input", "input")):
         if flag in flags:
-            request[field] = read_object(flags[flag])
+            # Only an exact dash selects stdin; every other value names a file.
+            request[field] = read_stdin() if flags[flag] == "-" else read_object(flags[flag])
     if "--expected-generation" in flags:
         request["expected_generation"] = flags["--expected-generation"]
     if operation == "check":

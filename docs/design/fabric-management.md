@@ -28,7 +28,8 @@ It does not promise conversation continuity across a native runtime restart.
 
 Images provide `fabric-agent` on `PATH`.
 The provider uses the image’s advertised command through authenticated OpenShell execution, with each flag and value passed as a separate argument.
-Configuration and invocation input travel in private temporary files inside the sandbox; the provider removes them after the call.
+`--config` and `--input` take a file path, or `-` to read one JSON object from stdin.
+Only an exact `-` selects stdin; commands leave stdin unread otherwise and reject a terminal or an empty or oversized stream.
 
 | Command | Behavior |
 |---|---|
@@ -62,7 +63,8 @@ OpenShell stop completion and retained-data behavior still require qualification
 ## Image Contract and Reference Implementation
 
 Every packaged `fabric-agent` image exposes `/opt/nemoclaw/bridge.json` and the matching `io.nemoclaw.fabric.bridge` label.
-The manifest contains `interface_version`, the six `operations`, and a cumulative prefix of native `health_checks`: `live`, `active`, `ready`.
+The manifest contains `interface_version`, the six `operations`, a cumulative prefix of native `health_checks` (`live`, `active`, `ready`), and the supported `input_sources`: `file` and `stdin`.
+Fields added within an interface version are additive; consumers ignore fields they do not recognize.
 The current command and response interface remains version 1.
 Fabric image catalogs embed the same capability object; the builder rejects disagreement.
 Fabric revision remains provenance for validation responses; missing provenance does not invalidate a configuration that the installed validator accepts.
