@@ -103,7 +103,7 @@ Native adapter implementation and its behavioral tests live in Fabric and use Fa
 The [image workflow](../.github/workflows/images.yml) builds the selected platform's agent images plus the proxy, verifies retained source hashes, and checks installed discovery metadata.
 It first builds and qualifies the separate dummy image, then runs the same [command contract suite](../image/test_agent_contract.py) against every selected agent image.
 Use the [reference image procedure](build.md#reference-contract-image) to run that suite locally against explicit image references.
-The suite tests real entrypoints, file inputs, exit codes, capability labels, standalone validation, host startup and shutdown, and retained files; the dummy also exercises successful configuration, health, invocation, and preparation.
+The suite tests real entrypoints, file and stdin inputs, exit codes, capability labels, standalone validation, host startup and shutdown, and retained files; the dummy also exercises successful configuration, health, invocation, and preparation.
 The workflow separately qualifies the installed OpenClaw, Hermes, and Pi adapters against isolated local inference, on platforms with those image targets.
 Rust- or documentation-only pushes skip that image build; their schema and descriptor consumption tests remain in the Rust suite.
 These checks use no live credentials and do not establish GPU inference or live OpenShell deployment behavior.
