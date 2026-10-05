@@ -3,6 +3,7 @@
 
 use nemoclaw_e2e::{docker, openshell::Fixture};
 use nemoclaw_sdk::{
+    CancellationToken, Deployment,
     config::Document,
     fabric_catalog::{FabricAdapter, FabricCatalog},
 };
@@ -70,6 +71,26 @@ fn assert_absent(kind: &str, name: &str) {
         error.contains("No such container") || error.contains("No such object"),
         "absence was not confirmed: {error}"
     );
+}
+
+/// Reapply through the selected SDK instance, including an explicitly reopened one.
+pub async fn assert_apply_unchanged(
+    deployment: &Deployment,
+    document: &Document,
+    cancel: &CancellationToken,
+) {
+    let result = deployment.apply(document, cancel).await.unwrap();
+    assert!(
+        result.changes.is_empty(),
+        "reapply changed resources: {:?}",
+        result.changes
+    );
+}
+
+pub fn with_upstream_model_digest(document: &Document, digest: &str) -> Document {
+    let mut value = serde_json::to_value(document).unwrap();
+    value["spec"]["services"]["shared"]["upstream"]["model"]["digest"] = json!(digest);
+    Document::parse(value.to_string().as_bytes()).unwrap()
 }
 
 pub struct Scenario {

@@ -5,7 +5,7 @@
 mod service_images;
 
 use nemoclaw_sdk::{CancellationToken, Deployment};
-use service_images::support::Scenario;
+use service_images::support::{Scenario, assert_apply_unchanged};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "requires explicit bundle, agent image/profile and proxy image; creates owned Docker resources"]
@@ -30,14 +30,7 @@ async fn shared_service_preserves_consumers_and_export_reapply() {
 
     let exported = scenario.export();
     assert_eq!(exported, document);
-    assert!(
-        deployment
-            .apply(&exported, &cancel)
-            .await
-            .unwrap()
-            .changes
-            .is_empty()
-    );
+    assert_apply_unchanged(&deployment, &exported, &cancel).await;
     assert_eq!(scenario.service_identity(&document), service);
     assert_eq!(scenario.agent_identity("assistant-1"), survivor);
 
@@ -61,14 +54,7 @@ async fn shared_service_preserves_consumers_and_export_reapply() {
     let exported = scenario.export();
     assert_eq!(exported, document);
     let reopened = Deployment::new(scenario.state.path(), &scenario.bundle);
-    assert!(
-        reopened
-            .apply(&exported, &cancel)
-            .await
-            .unwrap()
-            .changes
-            .is_empty()
-    );
+    assert_apply_unchanged(&reopened, &exported, &cancel).await;
     assert_eq!(scenario.service_identity(&document), service);
     scenario.destroy();
     scenario.assert_agent_absent("assistant-0");

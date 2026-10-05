@@ -8,6 +8,10 @@ use nemoclaw_sdk::config::Document;
 use serde_json::{Value, json};
 use std::{fs, os::unix::fs::PermissionsExt};
 
+/// Complete engine observation, kept opaque so tests describe preservation intent.
+#[derive(Debug, PartialEq)]
+pub struct ServiceSnapshot(Value);
+
 pub struct ManagedService {
     root: tempfile::TempDir,
     pub document: Document,
@@ -72,13 +76,13 @@ impl ManagedService {
         )
         .unwrap();
     }
-    pub fn engine(&self) -> Value {
+    fn engine(&self) -> Value {
         serde_json::from_slice(&fs::read(self.root.path().join("engine.json")).unwrap()).unwrap()
     }
-    pub fn control(&self, value: Value) {
+    fn control(&self, value: Value) {
         self.write("control.json", &value);
     }
-    pub async fn run(&self, scenario: &Scenario, command: &str, success: bool) -> Value {
+    async fn run(&self, scenario: &Scenario, command: &str, success: bool) -> Value {
         let document = self.root.path().join("config.json");
         fs::write(&document, serde_json::to_vec(&self.document).unwrap()).unwrap();
         let mut child = tokio::process::Command::new(scenario.bundle.join("bin/nemoclaw"));
@@ -117,6 +121,101 @@ impl ManagedService {
                 .unwrap();
         }
         serde_json::from_slice(&output.stdout).unwrap()
+    }
+    pub fn fail_capacity_observation(&self) {
+        self.control(json!({"capacity_failure": true}));
+    }
+    pub fn fail_container_creation(&self) {
+        self.control(json!({"create_failure": true}));
+    }
+    pub fn fail_ssh_observation(&self) {
+        self.control(json!({"transport_failure": true}));
+    }
+    pub fn clear_failures(&self) {
+        self.control(json!({}));
+    }
+    pub async fn plan(&self, scenario: &Scenario) {
+        self.run(scenario, "plan", true).await;
+    }
+    pub async fn plan_expect_failure(&self, scenario: &Scenario) {
+        self.run(scenario, "plan", false).await;
+    }
+    pub async fn apply(&self, scenario: &Scenario) {
+        self.run(scenario, "apply", true).await;
+    }
+    pub async fn apply_expect_failure(&self, scenario: &Scenario) {
+        self.run(scenario, "apply", false).await;
+    }
+    pub async fn assert_apply_unchanged(&self, scenario: &Scenario) {
+        let result = self.run(scenario, "apply", true).await;
+        assert_eq!(result["changes"], json!([]), "reapply must have no changes");
+    }
+    pub async fn assert_export_matches_document(&self, scenario: &Scenario) {
+        let exported = self.run(scenario, "export", true).await;
+        assert_eq!(exported, serde_json::to_value(&self.document).unwrap());
+    }
+    pub async fn destroy(&self, scenario: &Scenario) {
+        self.run(scenario, "destroy", true).await;
+    }
+    pub fn snapshot(&self) -> ServiceSnapshot {
+        ServiceSnapshot(self.engine())
+    }
+    pub fn assert_no_effects(&self) {
+        assert_eq!(
+            self.engine()["effects"],
+            0,
+            "plan must not mutate the service"
+        );
+    }
+    pub fn assert_no_capacity_observations(&self) {
+        assert!(!self.has_capacity_reads(), "plan must not observe capacity");
+    }
+    pub fn assert_storage_created_without_container(&self) {
+        let state = self.engine();
+        assert!(state["volume"].is_object(), "model storage must exist");
+        assert!(
+            state["container"].is_null(),
+            "failed creation must leave no container"
+        );
+    }
+    pub fn assert_storage_retained(&self, before: &ServiceSnapshot) {
+        assert_eq!(
+            self.engine()["volume"],
+            before.0["volume"],
+            "model storage must be retained"
+        );
+    }
+    pub fn assert_running(&self) {
+        assert_eq!(self.engine()["container"]["State"]["Running"], true);
+    }
+    pub fn assert_container_preserved(&self, before: &ServiceSnapshot) {
+        assert_eq!(
+            self.engine()["container"]["Id"],
+            before.0["container"]["Id"],
+            "service container must not be replaced"
+        );
+    }
+    pub fn assert_unchanged(&self, before: &ServiceSnapshot) {
+        assert_eq!(
+            &self.snapshot(),
+            before,
+            "remote resources must remain unchanged"
+        );
+    }
+    pub fn assert_destroyed_with_storage_retained(&self, before: &ServiceSnapshot) {
+        let state = self.engine();
+        assert!(
+            state["container"].is_null(),
+            "service container must be removed"
+        );
+        assert!(
+            state["network"].is_null(),
+            "service network must be removed"
+        );
+        assert_eq!(
+            state["volume"], before.0["volume"],
+            "model storage must be retained"
+        );
     }
     pub fn assert_runtime_configuration(&self) {
         let remote = self.engine();
@@ -181,7 +280,7 @@ impl ManagedService {
             "remote model storage leaked onto the gateway engine"
         );
     }
-    pub fn has_capacity_reads(&self) -> bool {
+    fn has_capacity_reads(&self) -> bool {
         self.root.path().join("capacity_reads").exists()
     }
 }

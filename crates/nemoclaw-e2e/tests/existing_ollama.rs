@@ -5,7 +5,7 @@
 mod service_images;
 
 use nemoclaw_sdk::{CancellationToken, Deployment};
-use service_images::support::Scenario;
+use service_images::support::{Scenario, assert_apply_unchanged, with_upstream_model_digest};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "requires explicit bundle, agent image/profile and proxy image; creates owned Docker resources"]
@@ -17,10 +17,7 @@ async fn existing_ollama_is_verified_reused_and_retained() {
     let cancel = CancellationToken::new();
 
     // A pre-existing model is identified by its digest, not just its name.
-    let mut wrong: serde_json::Value = serde_json::to_value(&document).unwrap();
-    wrong["spec"]["services"]["shared"]["upstream"]["model"]["digest"] =
-        serde_json::json!("b".repeat(64));
-    let wrong = nemoclaw_sdk::config::Document::parse(wrong.to_string().as_bytes()).unwrap();
+    let wrong = with_upstream_model_digest(&document, &"b".repeat(64));
     let error = deployment.apply(&wrong, &cancel).await.unwrap_err();
     assert!(
         error
@@ -39,14 +36,7 @@ async fn existing_ollama_is_verified_reused_and_retained() {
     let exported = scenario.export();
     assert_eq!(exported, document);
     let reopened = Deployment::new(scenario.state.path(), &scenario.bundle);
-    assert!(
-        reopened
-            .apply(&exported, &cancel)
-            .await
-            .unwrap()
-            .changes
-            .is_empty()
-    );
+    assert_apply_unchanged(&reopened, &exported, &cancel).await;
     assert_eq!(scenario.agent_identity("assistant-0"), agent);
     assert_eq!(scenario.service_identity(&document), service);
     scenario.assert_agent_service_access("assistant-0");

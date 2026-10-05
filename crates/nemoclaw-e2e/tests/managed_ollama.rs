@@ -13,43 +13,34 @@ use service_images::support::Scenario;
 async fn managed_ollama_recovers_and_retains_model_storage() {
     let mut scenario = Scenario::start().await;
     let service = managed::ManagedService::start(&mut scenario).await;
-    service.control(serde_json::json!({"capacity_failure":true}));
-    service.run(&scenario, "plan", true).await;
-    assert_eq!(service.engine()["effects"], 0);
-    assert!(!service.has_capacity_reads());
+    service.fail_capacity_observation();
+    service.plan(&scenario).await;
+    service.assert_no_effects();
+    service.assert_no_capacity_observations();
     scenario.assert_no_resources();
 
-    service.control(serde_json::json!({"create_failure":true}));
-    service.run(&scenario, "apply", false).await;
-    let partial = service.engine();
-    assert!(partial["volume"].is_object());
-    assert!(partial["container"].is_null());
+    service.fail_container_creation();
+    service.apply_expect_failure(&scenario).await;
+    service.assert_storage_created_without_container();
+    let partial = service.snapshot();
     scenario.assert_agent_absent("assistant-0");
 
-    service.control(serde_json::json!({}));
-    service.run(&scenario, "apply", true).await;
-    let ready = service.engine();
+    service.clear_failures();
+    service.apply(&scenario).await;
+    let ready = service.snapshot();
     service.assert_runtime_configuration();
-    assert_eq!(ready["volume"], partial["volume"]);
-    assert_eq!(ready["container"]["State"]["Running"], true);
+    service.assert_storage_retained(&partial);
+    service.assert_running();
     scenario.assert_agent_service_access("assistant-0");
     scenario.assert_agent_responds("assistant-0");
     let agent = scenario.agent_identity("assistant-0");
-    let exported = service.run(&scenario, "export", true).await;
-    assert_eq!(exported, serde_json::to_value(&service.document).unwrap());
-    let unchanged = service.run(&scenario, "apply", true).await;
-    assert_eq!(unchanged["changes"], serde_json::json!([]));
-    assert_eq!(
-        service.engine()["container"]["Id"],
-        ready["container"]["Id"]
-    );
+    service.assert_export_matches_document(&scenario).await;
+    service.assert_apply_unchanged(&scenario).await;
+    service.assert_container_preserved(&ready);
     assert_eq!(scenario.agent_identity("assistant-0"), agent);
     scenario.assert_agent_responds("assistant-0");
 
-    service.run(&scenario, "destroy", true).await;
-    let destroyed = service.engine();
-    assert!(destroyed["container"].is_null());
-    assert!(destroyed["network"].is_null());
-    assert_eq!(destroyed["volume"], ready["volume"]);
+    service.destroy(&scenario).await;
+    service.assert_destroyed_with_storage_retained(&ready);
     scenario.assert_agent_absent("assistant-0");
 }
