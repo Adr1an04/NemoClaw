@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-use nemoclaw_e2e::{docker, openshell::Fixture};
+use nemoclaw_e2e::{http_fixture as docker, openshell::Fixture};
 use nemoclaw_sdk::{
     CancellationToken, Deployment,
     config::Document,
@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::Write,
+    io::{Read, Write},
     path::PathBuf,
     process::{Command, Stdio},
     sync::{
@@ -22,29 +22,42 @@ use std::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub fn docker_output(args: &[&str], input: &[u8]) -> Value {
-    let mut child = Command::new("python3")
-        .arg(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/service_images/docker.py"
-        ))
+    let mut child = Command::new("docker")
+        .args(["--host", "unix:///var/run/docker.sock"])
+        .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(json!({"args":args,"stdin":input}).to_string().as_bytes())
-        .unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    serde_json::from_slice(&output.stdout).unwrap()
+    let collect = |mut pipe: Box<dyn Read + Send>| {
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            pipe.read_to_end(&mut bytes).unwrap();
+            bytes
+        })
+    };
+    let stdout = collect(Box::new(child.stdout.take().unwrap()));
+    let stderr = collect(Box::new(child.stderr.take().unwrap()));
+    child.stdin.take().unwrap().write_all(input).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(90);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            child.wait().unwrap();
+            let _ = stdout.join();
+            let error = stderr.join().unwrap();
+            panic!(
+                "docker {args:?} timed out: {}",
+                String::from_utf8_lossy(&error)
+            );
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
+    json!({"code":status.code().unwrap_or(-1),"stdout":stdout.join().unwrap(),"stderr":stderr.join().unwrap()})
 }
 fn bytes(value: &Value, key: &str) -> Vec<u8> {
     serde_json::from_value(value[key].clone()).unwrap()

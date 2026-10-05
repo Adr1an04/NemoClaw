@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #![cfg(target_os = "linux")]
 
-mod service_images;
-
+use crate::service_images::support::{Scenario, assert_apply_unchanged};
 use nemoclaw_sdk::{CancellationToken, Deployment};
-use service_images::support::{Scenario, assert_apply_unchanged};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "requires explicit bundle, agent image/profile and proxy image; creates owned Docker resources"]

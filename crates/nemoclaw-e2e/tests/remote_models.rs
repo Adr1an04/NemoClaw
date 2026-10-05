@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #![cfg(target_os = "linux")]
 
-mod service_images;
-
-use service_images::managed;
-use service_images::support::Scenario;
+use crate::service_images::managed;
+use crate::service_images::support::Scenario;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "requires explicit bundle, agent image/profile and proxy image; isolated SSH/Docker protocol and real agent image"]
