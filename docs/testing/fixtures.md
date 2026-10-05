@@ -235,17 +235,10 @@ This test creates uniquely named local containers and credential volumes and rem
 It checks SDK apply, export/reapply, failed readiness, image changes and container replacement with the same key, destroy retention, and rejection of missing, foreign, or substituted retained volumes.
 OpenShell and the upstream Ollama inventory are local protocol fixtures; no model executes.
 
-The SDK's ignored `cpu_runtime_provider_reconciles_compute_and_retains_data` test exercises the production Ollama and vLLM resource graphs through real Docker and OpenTofu.
-It requires `NEMOCLAW_TEST_BUNDLE` and explicit `NEMOCLAW_TEST_RUNTIME_IMAGE_OLLAMA` and `NEMOCLAW_TEST_RUNTIME_IMAGE_VLLM` digest references to loaded CPU fixture images.
-Those images must provide Python 3 and `/usr/local/bin/nemoclaw-runtime`, which writes a fresh ready status to `/data/status.json` and stays running until stopped.
-They must also carry the current runtime-spec label and the backend, recipe, or authentication labels required by their compiled service; see [runtime image compatibility](../provider.md#runtime-image-compatibility).
-Run it with `cargo test -p nemoclaw-sdk cpu_runtime_provider_reconciles_compute_and_retains_data -- --ignored`.
-It adapts host placement and GPU-sized limits for CPU execution and checks replacement, network recreation, and a retained data sentinel.
-It does not qualify GPU execution, model preparation, inference, or the runtime's hardware checks.
-
 ## Standalone Cache and Credential Resources
 
-On Linux with Docker, select a verified bundle, an explicit local engine socket, and an already loaded digest-pinned image containing Python 3.
+On Linux with Docker, select a verified bundle, an explicit local engine socket, and an already loaded digest-pinned image containing `python3` and `sha256sum`, such as an agent image.
+The fixture container runs as root, so the image's own user does not matter.
 From the repository root:
 
 ```sh
@@ -259,8 +252,8 @@ The [hand-written HCL](../../crates/nemoclaw-e2e/tests/fixtures/cache_provider.t
 The fixture creates fresh owned resources, checks no-op, replacement, failed-start recovery, retained teardown/reapply, and cache reconstruction with the same credential.
 Missing or substituted credential volumes must stop apply before compute creation and preserve state.
 Teardown sets the container count to zero while keeping both volume declarations; ordinary `tofu destroy` is deliberately blocked by their retention rules.
-The runner removes only its labelled resources afterward and retains logs and state under its printed temporary path for diagnosis.
-Its Python process simulates model reconstruction and a credential; it does not qualify the vLLM supervisor, GPU execution, model preparation, inference, or OpenShell deployment.
+The test removes only its labelled resources afterward and retains logs and state under its printed temporary path for diagnosis.
+The container's Python process simulates model reconstruction and a credential; it does not qualify the vLLM supervisor, GPU execution, model preparation, inference, or OpenShell deployment.
 
 ## Fabric Discovery and Execution
 
