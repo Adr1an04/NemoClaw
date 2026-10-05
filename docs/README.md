@@ -55,12 +55,12 @@ TBD is not a support claim or a delivery commitment.
 
 | Task | Guide |
 |---|---|
-| Run workspace checks and collect coverage | [Tests](testing.md) |
-| Exercise OpenTofu and bundles with local fixtures | [Run integration tests](testing/fixtures.md) |
-| Test explicitly owned live resources | [Run live tests](testing/live.md) |
-| Write or reorganize documentation | [Contribute documentation](CONTRIBUTING.md) |
-| Validate, preview, or publish the v1 site | [Documentation build](AUTOMATION.md) |
-| Update the generated schema and field reference | [Schema maintenance](configuration-schema.md) |
+| Run workspace checks and collect coverage | [Tests](contributing/testing.md) |
+| Exercise OpenTofu and bundles with local fixtures | [Run integration tests](contributing/integration-tests.md) |
+| Test explicitly owned live resources | [Run live tests](contributing/live-tests.md) |
+| Write or reorganize documentation | [Contribute documentation](contributing/documentation.md) |
+| Validate, preview, or publish the v1 site | [Documentation build](contributing/documentation-build.md) |
+| Update the generated schema and field reference | [Schema maintenance](contributing/configuration-schema.md) |
 
 ## Understand the Design
 
@@ -77,10 +77,8 @@ The design decision defines current invariants; historical test results apply on
 | Apply stages, component handoffs, and agent harness startup | [Apply flow](design/apply-flow.md) |
 | Process lifetime, watchdog recovery, and agent ownership | [Runtime design](design/runtime.md) |
 | Fabric runtime ownership and observation limits | [Fabric management](design/fabric-management.md) |
-| Connections, engine identity, inference traffic, and host capacity | [Execution targets](design/execution-targets.md) |
+| Connections, engine identity, inference traffic, host capacity, and their implementation constraints | [Execution targets](design/execution-targets.md) |
 | Artifact ownership, preparation verification, and output manifests | [Recipe design](design/recipes.md) |
-| Current engine constraints and source locations | [Execution-engine assumptions](engine-assumptions.md) |
-| Proposed migration of previous user guides, public routes, and release documentation | [Documentation migration plan](design/documentation-migration.md) |
 
 ## Sources and Fixtures
 
