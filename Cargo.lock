@@ -2076,10 +2076,13 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.4.3",
  "jsonschema 0.56.0",
+ "nemoclaw-discovery",
  "nemoclaw-sdk",
+ "serde",
  "serde-saphyr",
  "serde_json",
  "sha2 0.11.0",
+ "tokio",
 ]
 
 [[package]]
@@ -2122,6 +2125,26 @@ dependencies = [
  "terminal_size",
  "tokio",
  "vt100",
+]
+
+[[package]]
+name = "nemoclaw-discovery"
+version = "0.1.0"
+dependencies = [
+ "bollard",
+ "futures-util",
+ "hyper",
+ "hyper-util",
+ "nemoclaw-sdk",
+ "openshell-sdk",
+ "reqwest 0.13.5",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "tokio",
+ "tonic",
+ "url",
 ]
 
 [[package]]
@@ -2177,6 +2200,7 @@ dependencies = [
  "clap",
  "crossterm",
  "nemoclaw-authoring",
+ "nemoclaw-discovery",
  "nemoclaw-sdk",
  "ratatui",
  "serde",
@@ -2194,11 +2218,10 @@ dependencies = [
  "bollard",
  "futures-util",
  "getrandom 0.4.3",
- "hyper",
- "hyper-util",
  "interprocess",
  "ipnet",
  "nemo-fabric-core",
+ "nemoclaw-discovery",
  "nemoclaw-runtime",
  "nemoclaw-sdk",
  "openshell-core",
@@ -2256,7 +2279,6 @@ dependencies = [
  "async-trait",
  "bollard",
  "bollard-stubs",
- "futures-util",
  "getrandom 0.4.3",
  "interprocess",
  "ipnet",
@@ -2268,7 +2290,6 @@ dependencies = [
  "openshell-policy",
  "process-wrap",
  "regex",
- "reqwest 0.13.5",
  "schemars",
  "serde",
  "serde-saphyr",
