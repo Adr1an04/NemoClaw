@@ -99,6 +99,38 @@ fn documented_state_json_preserves_full_instance_addresses() {
     );
     assert!(!observed.contains_key("docker_container.agent"));
 }
+
+#[test]
+fn native_helm_state_preserves_its_namespace_and_immutable_chart_binding() {
+    let address = "helm_release.gateway";
+    let chart = crate::kubernetes::gateway::CHART;
+    let resource = serde_json::json!({
+        "address": address, "mode": "managed",
+        "values": {"id":"nc-owned", "name":"nc-owned", "namespace":"owned-agents", "chart":chart}
+    });
+    let observed = read(&state(serde_json::json!([resource]))).unwrap();
+    let binding = &observed[address];
+    assert_eq!(binding.id, "nc-owned");
+    assert_eq!(binding.name, "nc-owned");
+    assert_eq!(binding.namespace, "owned-agents");
+    assert_eq!(binding.chart, chart);
+    assert!(
+        binding.spec.is_empty(),
+        "native Helm state has no NemoClaw spec"
+    );
+    for field in ["namespace", "chart"] {
+        let mut invalid = resource.clone();
+        invalid["values"][field] = serde_json::json!(7);
+        assert!(read(&state(serde_json::json!([invalid]))).is_err());
+    }
+    let other = read(&state(serde_json::json!([object(
+        "docker_container.runtime",
+        "container"
+    )])))
+    .unwrap();
+    assert!(other["docker_container.runtime"].namespace.is_empty());
+    assert!(other["docker_container.runtime"].chart.is_empty());
+}
 #[test]
 fn data_observations_do_not_become_managed_bindings() {
     let data = serde_json::json!({"address":"data.example.observed", "mode":"data", "values":{"id":"observation"}});
@@ -381,6 +413,44 @@ fn malformed_or_unknown_generations_are_rejected_without_rewriting_state() {
         malformed["generations"][kind] = value;
         assert_rejected_record_preserves_state(malformed);
     }
+}
+
+/// A managed Kubernetes deployment's two resource kinds get generations and
+/// survive a save and reload, like every other kind.
+#[test]
+fn a_kubernetes_records_generations_reload_and_stay_stable() {
+    let mut value = serde_json::to_value(
+        Document::parse(include_bytes!("../../tests/fixtures/config/local.yaml").as_slice())
+            .unwrap(),
+    )
+    .unwrap();
+    value["spec"]["gateway"] = serde_json::json!({
+        "management": "managed", "runtime": {"provider": "kubernetes"},
+        "endpoint": "https://127.0.0.1:17671",
+        "kubernetes": {
+            "kubeconfig": {"env": "TEST_KUBECONFIG"}, "context": "test-cluster",
+            "namespace": "test-agents", "authentication": {"profile": "development"}
+        }
+    });
+    value["spec"]["sandboxes"][0]["image"]["metadata"] =
+        serde_json::json!({"env": "TEST_IMAGE_METADATA"});
+    let document = Document::parse(serde_json::to_vec(&value).unwrap().as_slice()).unwrap();
+    let mut record = Record::new(document.clone()).unwrap();
+    for kind in [
+        crate::kubernetes::GATEWAY_KIND,
+        crate::kubernetes::STORAGE_KIND,
+    ] {
+        assert_eq!(record.generations[kind].len(), 32, "{kind}");
+    }
+    let generations = record.generations.clone();
+    let directory = tempfile::tempdir().unwrap();
+    let store = Store::open(directory.path()).unwrap();
+    store.save(&record).unwrap();
+    let mut reloaded = store.load().unwrap().unwrap();
+    reloaded.allocate_missing_generations(&document).unwrap();
+    assert_eq!(reloaded.generations, generations);
+    record.allocate_missing_generations(&document).unwrap();
+    assert_eq!(record.generations, generations);
 }
 
 #[test]

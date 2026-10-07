@@ -40,6 +40,10 @@ fn is_false(value: &bool) -> bool {
 }
 fn required_generation_kinds(document: &Document) -> Result<Vec<&'static str>, Error> {
     let mut kinds = vec!["workspace", "provider", "sandbox", "managed_gateway"];
+    if document.spec.gateway.as_kubernetes().is_some() {
+        kinds.push(crate::kubernetes::GATEWAY_KIND);
+        kinds.push(crate::kubernetes::STORAGE_KIND);
+    }
     kinds.extend(crate::services::generation_kinds(document)?);
     kinds.sort_unstable();
     kinds.dedup();
@@ -55,7 +59,9 @@ fn supported_generation_kind(kind: &str) -> bool {
     matches!(
         kind,
         "workspace" | "provider" | "sandbox" | "managed_gateway"
-    ) || crate::services::supported_generation_kind(kind)
+    ) || kind == crate::kubernetes::GATEWAY_KIND
+        || kind == crate::kubernetes::STORAGE_KIND
+        || crate::services::supported_generation_kind(kind)
 }
 fn allocate_missing_generation_values(
     generations: &mut Generations,
@@ -131,6 +137,15 @@ impl Record {
         // validated plan must still verify live ownership before any mutation.
     }
     pub fn validate_pending_intent(&self, document: &Document) -> Result<(), Error> {
+        if self.pending
+            && self.runtime_pending
+            && self.document.spec.gateway.as_kubernetes().is_some()
+            && self.digest != document.digest()
+        {
+            return Err(Error::Conflict(
+                "unfinished Kubernetes platform apply requires its original configuration and state for recovery",
+            ));
+        }
         if !self.pending || self.runtime_pending {
             return Ok(());
         }
@@ -305,6 +320,10 @@ pub(crate) struct StateBinding {
     pub id: String,
     #[serde(default)]
     pub name: String,
+    #[serde(default)]
+    pub namespace: String,
+    #[serde(default)]
+    pub chart: String,
     #[serde(default)]
     pub workspace: String,
     #[serde(default)]
@@ -487,6 +506,8 @@ fn parse_bindings(bytes: &[u8]) -> Result<BTreeMap<String, StateBinding>, Error>
                 binding.id = attributes.id;
                 binding.spec = attributes.spec;
                 binding.name = attributes.name;
+                binding.namespace = attributes.namespace;
+                binding.chart = attributes.chart;
                 binding.workspace = attributes.workspace;
                 binding.owner = attributes.owner;
                 binding.generation = attributes.generation;
