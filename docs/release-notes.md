@@ -16,6 +16,9 @@ See [the overview](overview.md) for implemented boundaries and [the CLI referenc
 
 Earlier CLI commands, schemas, and state formats have no compatibility guarantees.
 See [migration](migration.md) for where each earlier task lives now, and [state](state.md) for data preservation.
+Recent development changes that affect existing deployments:
+
+- Docker-managed vLLM and Ollama services default to [`updatePolicy: Preserve`](inference.md#set-container-limits-and-update-policy), which refuses an image, model, serving, or container-limit change that would replace a running container; set `spec.services.<name>.updatePolicy: Recreate` to permit the replacement and its downtime.
 
 ## Qualification and Known Issues
 

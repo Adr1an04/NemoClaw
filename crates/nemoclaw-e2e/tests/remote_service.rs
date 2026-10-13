@@ -121,6 +121,10 @@ impl Scenario {
             json!({"engine":"ssh://operator@gpu-box","networkCidr":"172.30.119.0/24"});
         value["spec"]["services"]["qwen"]["publication"] =
             json!({"endpoint":"http://10.0.0.8:18888/v1","bindAddress":"10.0.0.8"});
+        value["spec"]["services"]["qwen"]["container"] = json!({
+            "cpuLimitMillis": if kind == "ollama" { 10 } else { 1250 },
+            "memoryLimitGiB": 64
+        });
         if authenticated {
             value["spec"]["services"]["qwen"]["authentication"] = "bearer".into();
             value["spec"]["sandboxes"][0]["agent"]["auth"] = json!({"method":"api-key"});
@@ -184,7 +188,27 @@ impl Scenario {
     /// later unchanged applies must reproduce.
     async fn apply(&self) -> Value {
         self.run("apply", "config.yaml", true).await;
-        read(&self.root, "engine.json")
+        let state = read(&self.root, "engine.json");
+        let config = read(&self.root, "config.yaml");
+        let limits = &config["spec"]["services"]["qwen"]["container"];
+        let host = &state["container"]["HostConfig"];
+        // A 100 ms period, as on Kubernetes; Ollama's 10 millicores give the
+        // kernel's 1 ms minimum quota.
+        assert_eq!(host["CpuPeriod"], 100_000);
+        assert_eq!(
+            host["CpuQuota"],
+            limits["cpuLimitMillis"].as_u64().unwrap() * 100
+        );
+        assert_eq!(
+            host["Memory"],
+            limits["memoryLimitGiB"].as_u64().unwrap() * (1_u64 << 30)
+        );
+        assert_eq!(host["MemorySwap"], host["Memory"]);
+        assert_eq!(
+            state["container"]["Config"]["Labels"]["nemoclaw.nvidia.com/memory-limit-gib"],
+            limits["memoryLimitGiB"].to_string()
+        );
+        state
     }
 
     fn runtime_state(&self) -> Vec<u8> {
@@ -194,12 +218,17 @@ impl Scenario {
 
 // Every runtime plan, apply, export, or destroy after the service network
 // exists reads it, and the Docker provider waits 2 s before each read. Each
-// scenario therefore creates one runtime and runs every check that needs it.
+// scenario therefore creates one runtime and runs every check that needs it,
+// unless those checks would exceed the lifecycle per-test limit in
+// .config/test-budgets.yaml.
 //
 // vLLM recovery runs in the bearer scenario below. The runtime-independent
-// checks of an applied deployment (the readiness gate, compute replacement
-// plans, and pull policy reapply) run once, against vLLM; the provider's
-// readiness and storage tests cover each runtime's own observations.
+// checks of an applied deployment (the readiness gate and pull policy reapply)
+// run once, against vLLM. Replacement protection runs for both model kinds, in
+// scenarios of its own that keep the reapply and recovery scenarios under that
+// limit. The memory decrease, whose compiled label does not depend on the kind,
+// runs once, against Ollama. The provider's readiness and storage tests cover
+// their own observations.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires NEMOCLAW_TEST_BUNDLE; isolated SSH/Docker and OpenShell fixtures"]
 async fn remote_model_reapply_and_drift_keep_bindings_and_stop_on_observation_failure() {
@@ -208,7 +237,6 @@ async fn remote_model_reapply_and_drift_keep_bindings_and_stop_on_observation_fa
     assert_eq!(stable["pulls"], 1);
     export_and_reapply_are_unchanged(&s, &stable).await;
     let state = readiness_is_checked_on_each_apply(&s, &stable).await;
-    image_change_plans_compute_replacement_without_effects(&s, &stable, &state).await;
     plans_stop_on_observation_failure(&s, &stable, &state, json!({"transport_failure":true})).await;
     assert_no_probes(&s);
     removed_pull_policy_reapplies_without_pulling(&s, &stable).await;
@@ -228,6 +256,25 @@ async fn remote_ollama_recovers_reapplies_and_stops_on_observation_failure_keepi
     plans_stop_on_observation_failure(&s, &stable, &state, json!({"transport_failure":true})).await;
     assert_no_probes(&s);
     incompatible_image_blocks_changes_but_not_teardown(&s, &stable["volume"]).await;
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires NEMOCLAW_TEST_BUNDLE; isolated SSH/Docker and OpenShell fixtures"]
+async fn remote_vllm_preserve_refuses_image_change_and_recreate_plans_replacement() {
+    let s = Scenario::new("nvidia.fabric.openclaw", false, "vllm").await;
+    let stable = s.apply().await;
+    let state = s.runtime_state();
+    image_change_plans_compute_replacement_without_effects(&s, &stable, &state).await;
+    assert_no_probes(&s);
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires NEMOCLAW_TEST_BUNDLE; isolated SSH/Docker and OpenShell fixtures"]
+async fn remote_ollama_preserve_refuses_image_and_memory_changes_and_recreate_plans_replacement() {
+    let s = Scenario::new("nvidia.fabric.openclaw", false, "ollama").await;
+    let stable = s.apply().await;
+    let state = s.runtime_state();
+    image_change_plans_compute_replacement_without_effects(&s, &stable, &state).await;
+    memory_change_plans_compute_replacement_without_effects(&s, &stable, &state).await;
+    assert_no_probes(&s);
 }
 
 // Bearer scenarios leave image compatibility, readiness, and transport checks,
@@ -612,11 +659,59 @@ async fn image_change_plans_compute_replacement_without_effects(
     stable: &Value,
     state: &[u8],
 ) {
-    let root = s.root.as_path();
-    let original = read(root, "config.yaml");
-    let mut changed = original.clone();
+    let mut changed = read(&s.root, "config.yaml");
     changed["spec"]["services"]["qwen"]["image"] =
         json!(format!("runtime@sha256:{}", "f".repeat(64)));
+    change_plans_compute_replacement_without_effects(s, stable, state, changed).await;
+}
+
+// The Docker provider would lower memory on the running model in place, where
+// the kernel can OOM-kill it; Preserve must refuse the change as a replacement.
+async fn memory_change_plans_compute_replacement_without_effects(
+    s: &Scenario,
+    stable: &Value,
+    state: &[u8],
+) {
+    let mut changed = read(&s.root, "config.yaml");
+    changed["spec"]["services"]["qwen"]["container"]["memoryLimitGiB"] = json!(32);
+    change_plans_compute_replacement_without_effects(s, stable, state, changed).await;
+}
+
+async fn change_plans_compute_replacement_without_effects(
+    s: &Scenario,
+    stable: &Value,
+    state: &[u8],
+    mut changed: Value,
+) {
+    let root = s.root.as_path();
+    let original = read(root, "config.yaml");
+    save(root, "config.yaml", &changed);
+    let intent = fs::read(root.join("deployment/intent.json")).unwrap();
+    for operation in ["plan", "apply"] {
+        let refusal: Value =
+            serde_json::from_slice(&s.run(operation, "config.yaml", false).await).unwrap();
+        assert!(
+            refusal["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("updatePolicy: Recreate"),
+            "{refusal}"
+        );
+        assert!(
+            refusal["help"]
+                .as_str()
+                .unwrap()
+                .contains("spec.services.qwen.updatePolicy: Recreate"),
+            "{refusal}"
+        );
+        assert_eq!(&read(root, "engine.json"), stable);
+        assert_eq!(s.runtime_state(), state);
+        assert_eq!(
+            fs::read(root.join("deployment/intent.json")).unwrap(),
+            intent
+        );
+    }
+    changed["spec"]["services"]["qwen"]["updatePolicy"] = json!("Recreate");
     save(root, "config.yaml", &changed);
     let output = s.run("plan", "config.yaml", true).await;
     let plan: Value = serde_json::from_slice(&output).unwrap();
@@ -706,9 +801,42 @@ async fn removed_pull_policy_reapplies_without_pulling(s: &Scenario, stable: &Va
     stopped["container"]["State"]["Running"] = json!(false);
     save(root, "engine.json", &stopped);
     save(root, "control.json", &json!({"pull_failure":true}));
+    // The provider refreshes a stopped container as must_run=false. Because
+    // the stopped container has no active port map, its published port also
+    // drifts and the plan replaces it, which Preserve allows.
+    let plan: Value = serde_json::from_slice(&s.run("plan", "config.yaml", true).await).unwrap();
+    let address = "docker_container.inference_service_inference_qwen";
+    assert!(
+        plan["changes"]
+            .as_array()
+            .unwrap()
+            .contains(&json!({"resource": address, "actions": ["delete", "create"]})),
+        "{plan}"
+    );
+    let shown = tokio::process::Command::new(s.bundle.join("libexec/tofu"))
+        .args(["show", "-json", "apply.plan"])
+        .current_dir(root.join("deployment/runtime"))
+        .output()
+        .await
+        .unwrap();
+    let shown: Value = serde_json::from_slice(&shown.stdout).unwrap();
+    let change = shown["resource_changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|change| change["address"] == address)
+        .unwrap();
+    assert_eq!(change["change"]["before"]["must_run"], false, "{change}");
     s.run("apply", "config.yaml", true).await;
-    assert_eq!(read(root, "engine.json")["pulls"], stable["pulls"]);
-    assert_eq!(read(root, "engine.json")["volume"], stable["volume"]);
+    let replaced = read(root, "engine.json");
+    assert_ne!(replaced["container"]["Id"], stable["container"]["Id"]);
+    assert_eq!(replaced["container"]["State"]["Running"], true);
+    assert_eq!(
+        replaced["creates"].as_u64().unwrap(),
+        stable["creates"].as_u64().unwrap() + 1
+    );
+    assert_eq!(replaced["pulls"], stable["pulls"]);
+    assert_eq!(replaced["volume"], stable["volume"]);
 }
 
 // Compute image changes must not change the identity of retained credentials.
@@ -719,6 +847,7 @@ async fn bearer_survives_compute_replacement(s: &Scenario, volume: &Value) {
     let mut changed = read(root, "config.yaml");
     let replacement = format!("runtime@sha256:{}", "e".repeat(64));
     changed["spec"]["services"]["qwen"]["image"] = json!(replacement);
+    changed["spec"]["services"]["qwen"]["updatePolicy"] = json!("Recreate");
     save(root, "config.yaml", &changed);
     let mut fixture = read(root, "fixture.json");
     fixture["image"]["Id"] = json!("sha256:replacement-runtime");

@@ -231,6 +231,28 @@ fn container(target: &Target) -> Result<Value, Error> {
     if process.gpu {
         attrs["gpus"] = json!("all");
     }
+    // Labels force replacement because Docker provider v4.6.0 updates limits in
+    // place: its Update omits CFS quota, and lowering memory on a running
+    // container can OOM-kill the model. Its `cpus` formatter also loses some
+    // fractions, so CPU uses an integer quota:
+    // https://github.com/kreuzwerker/terraform-provider-docker/blob/v4.6.0/internal/provider/resource_docker_container_funcs.go
+    if let Some(limit) = process.cpu_limit_millis {
+        attrs["cpu_period"] = json!(crate::managed::CPU_PERIOD_MICROS);
+        attrs["cpu_quota"] = json!(crate::managed::cpu_quota_micros(limit));
+        attrs["labels"].as_array_mut().unwrap().push(json!({
+            "label": "nemoclaw.nvidia.com/cpu-limit-millis",
+            "value": limit.to_string()
+        }));
+    }
+    // Containers created before memory limits were configurable used the
+    // default and have no label; keep them unchanged.
+    let memory_gib = process.memory_bytes / nemoclaw_runtime::hardware::GIB;
+    if memory_gib != crate::services::installers::vllm::DEFAULT_MEMORY_LIMIT_GIB {
+        attrs["labels"].as_array_mut().unwrap().push(json!({
+            "label": "nemoclaw.nvidia.com/memory-limit-gib",
+            "value": memory_gib.to_string()
+        }));
+    }
     Ok(attrs)
 }
 pub(crate) fn configure(graph: &mut Value, raw: &[Target]) -> Result<(), Error> {

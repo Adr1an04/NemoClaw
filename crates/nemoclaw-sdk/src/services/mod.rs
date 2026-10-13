@@ -13,7 +13,9 @@ pub mod installers;
 pub mod placement;
 mod readiness;
 mod registry;
+mod update_policy;
 pub(crate) use readiness::configure_proxy_readiness;
+pub use update_policy::ServiceUpdatePolicy;
 mod validation;
 pub use validation::validate_resource_spec;
 

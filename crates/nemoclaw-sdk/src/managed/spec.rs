@@ -60,8 +60,19 @@ pub struct Process {
     pub port: u16,
     pub shared_memory_bytes: u64,
     pub host_ipc: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_limit_millis: Option<u32>,
     pub memory_bytes: u64,
     pub gpu: bool,
+}
+/// CFS period for container CPU limits, matching kubelet and `docker --cpus`.
+pub(crate) const CPU_PERIOD_MICROS: u64 = 100_000;
+/// The kernel's minimum CFS quota; kubelet raises smaller CPU limits to it.
+const MIN_CPU_QUOTA_MICROS: u64 = 1000;
+
+/// CFS quota per [`CPU_PERIOD_MICROS`] for a CPU limit in millicores.
+pub(crate) fn cpu_quota_micros(limit_millis: u32) -> u64 {
+    (u64::from(limit_millis) * CPU_PERIOD_MICROS / 1000).max(MIN_CPU_QUOTA_MICROS)
 }
 /// Data source computing a Docker gateway container's launch.
 pub const GATEWAY_RUNTIME_DATA_SOURCE: &str = "gateway_runtime";
@@ -371,6 +382,7 @@ impl Spec {
                 && process.port != 0
                 && !process.architecture.is_empty()
                 && process.memory_bytes > 0
+                && process.cpu_limit_millis != Some(0)
             {
                 return Ok(());
             }
@@ -546,6 +558,10 @@ impl Spec {
             }
             host["Memory"] = json!(process.memory_bytes);
             host["MemorySwap"] = json!(process.memory_bytes);
+            if let Some(limit) = process.cpu_limit_millis {
+                host["CpuPeriod"] = json!(CPU_PERIOD_MICROS);
+                host["CpuQuota"] = json!(cpu_quota_micros(limit));
+            }
             if process.gpu {
                 host["DeviceRequests"] = json!([{"Driver":"","Count":-1,"Capabilities":[["gpu"]]}]);
             }

@@ -632,14 +632,17 @@ pub(crate) fn render_error(
     }
     let help = match sdk {
         Some(Error::SandboxChangeRefused { .. }) => Some(
-            "Keep this deployment's state. Use a separate deployment with a fresh UID and state directory; see docs/usage.md#choose-the-change-path. Export and destroy still use the retained configuration.",
+            "Keep this deployment's state. Use a separate deployment with a fresh UID and state directory; see docs/usage.md#choose-the-change-path. Export and destroy still use the retained configuration.".to_owned(),
         ),
         Some(Error::SandboxStartup { .. }) => Some(
-            "Inspect the sandbox with OpenShell using this deployment's gateway and workspace; collect gateway and supervisor logs before cleanup.",
+            "Inspect the sandbox with OpenShell using this deployment's gateway and workspace; collect gateway and supervisor logs before cleanup.".to_owned(),
         ),
+        Some(Error::DockerModelUpdateRefused { service }) => Some(format!(
+            "To replace the running model container, set spec.services.{service}.updatePolicy: Recreate and apply again; the model is unavailable until the replacement starts. See docs/inference.md#set-container-limits-and-update-policy."
+        )),
         _ => None,
     };
-    if let Some(help) = help {
+    if let Some(help) = &help {
         details["help"] = serde_json::json!(help);
     }
     match format {
@@ -676,7 +679,7 @@ pub(crate) fn render_error(
                 output.push_str(&format!("\n{remaining}\n"));
             }
             if let Some(help) = help {
-                output.push_str(&format!("\n{help}\n"));
+                output.push_str(&format!("\n{}\n", terminal_text(&help)));
             }
             context.append_warnings(&mut output);
             output
@@ -1097,6 +1100,28 @@ mod tests {
                 .unwrap()
                 .contains("docs/usage.md#choose-the-change-path")
         );
+    }
+
+    #[test]
+    fn docker_model_refusal_names_the_service_update_policy_field() {
+        for command in ["plan", "apply"] {
+            let cli = Cli::try_parse_from(["nemoclaw", command, "spark.yaml"]).unwrap();
+            let context = RenderContext::new(&cli);
+            let error = Error::DockerModelUpdateRefused {
+                service: "qwen".into(),
+            };
+            let json: Value =
+                serde_json::from_str(&render_error(&error, OutputFormat::Json, &context)).unwrap();
+            let help = json["help"].as_str().unwrap();
+            for expected in [
+                "spec.services.qwen.updatePolicy: Recreate",
+                "docs/inference.md#set-container-limits-and-update-policy",
+            ] {
+                assert!(help.contains(expected), "missing {expected}: {help}");
+            }
+            let text = render_error(&error, OutputFormat::Text, &context);
+            assert!(text.contains(help), "{text}");
+        }
     }
 
     #[test]

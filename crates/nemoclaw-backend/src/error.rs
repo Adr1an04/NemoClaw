@@ -20,6 +20,10 @@ pub enum Error {
         sandbox: String,
         action: &'static str,
     },
+    #[error(
+        "Docker model service '{service}' is preserved by updatePolicy: Preserve; replacing a running or incompletely observed container requires explicit updatePolicy: Recreate, which permits downtime if the replacement cannot start; resources retained"
+    )]
+    DockerModelUpdateRefused { service: String },
     #[error("gateway is incompatible with this configuration: {0}")]
     GatewayIncompatible(String),
     #[error(

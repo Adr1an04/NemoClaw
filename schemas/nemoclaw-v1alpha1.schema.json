@@ -2314,11 +2314,25 @@
     },
     "ServiceContainer": {
       "additionalProperties": false,
-      "description": "Managed inference IPC and shared-memory settings.",
+      "description": "Managed inference CPU and memory limits, IPC, and shared-memory settings.",
       "properties": {
+        "cpuLimitMillis": {
+          "description": "CPU usage limit in millicores. Omission leaves Docker CPU usage unrestricted. Changing the limit replaces the model container.",
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 1,
+          "type": "integer"
+        },
         "ipc": {
           "$ref": "#/$defs/ServiceIpc",
           "description": "IPC namespace. Omission uses private; host shares the execution host's IPC namespace."
+        },
+        "memoryLimitGiB": {
+          "description": "Container memory limit in GiB, independent of the model's GPU budget. Omission retains Docker's 104 GiB limit. Changing the limit replaces the model container.",
+          "format": "uint64",
+          "maximum": 8589934591,
+          "minimum": 1,
+          "type": "integer"
         },
         "sharedMemoryGiB": {
           "description": "Shared-memory size in GiB, from 1 through 64. Omission uses 8; host IPC uses the host's existing shared-memory mount instead.",
@@ -2411,7 +2425,7 @@
           "properties": {
             "container": {
               "$ref": "#/$defs/ServiceContainer",
-              "description": "Optional IPC and shared-memory settings for the runtime container."
+              "description": "Container CPU and memory limits, IPC, and shared memory for Docker. Native managed Podman inference is unsupported. Omission uses private IPC and 8 GiB of shared memory."
             },
             "hardware": {
               "$ref": "#/$defs/ServiceHardware",
@@ -2455,6 +2469,11 @@
             "serving": {
               "$ref": "#/$defs/OllamaServing",
               "description": "Ollama serving limits."
+            },
+            "updatePolicy": {
+              "$ref": "#/$defs/ServiceUpdatePolicy",
+              "default": "Preserve",
+              "description": "Preserve refuses replacement of a running Docker model container. Recreate permits sequential replacement and possible downtime until removed or changed."
             }
           },
           "required": [
@@ -2714,7 +2733,7 @@
             },
             "container": {
               "$ref": "#/$defs/ServiceContainer",
-              "description": "Optional managed container IPC and shared-memory settings. Omission uses private IPC and 8 GiB of shared memory."
+              "description": "Container CPU and memory limits, IPC, and shared memory for Docker. Native managed Podman inference is unsupported. Omission uses private IPC and 8 GiB of shared memory."
             },
             "hardware": {
               "$ref": "#/$defs/ServiceHardware",
@@ -2766,6 +2785,11 @@
             "serving": {
               "$ref": "#/$defs/Serving",
               "description": "Service limits. Omission selects the SDK defaults; recipe serving settings select recipe-specific parsers and execution options."
+            },
+            "updatePolicy": {
+              "$ref": "#/$defs/ServiceUpdatePolicy",
+              "default": "Preserve",
+              "description": "Preserve refuses replacement of a running Docker model container. Recreate permits sequential replacement and possible downtime until removed or changed."
             }
           },
           "required": [
@@ -2931,6 +2955,21 @@
         "bindAddress"
       ],
       "type": "object"
+    },
+    "ServiceUpdatePolicy": {
+      "description": "Whether updates may stop an existing model service before its replacement is ready.",
+      "oneOf": [
+        {
+          "const": "Preserve",
+          "description": "Keep existing services and reject changes that require their replacement.",
+          "type": "string"
+        },
+        {
+          "const": "Recreate",
+          "description": "Permit sequential replacement, including downtime if the replacement cannot start.",
+          "type": "string"
+        }
+      ]
     },
     "Serving": {
       "additionalProperties": false,

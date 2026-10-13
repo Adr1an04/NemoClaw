@@ -130,6 +130,7 @@ fn runtime_observations(
         expected: runtime_bindings(targets, bindings)?,
         gateway_running: document.spec.gateway.as_managed().is_none(),
     };
+    preserve_docker_models(document, plan)?;
     if let Some(gateway) = targets
         .iter()
         .find(|target| target.kind == crate::kubernetes::GATEWAY_KIND)
@@ -161,6 +162,56 @@ fn runtime_observations(
         });
     }
     Ok(result)
+}
+
+fn preserve_docker_models(document: &Document, plan: &Plan) -> Result<(), Error> {
+    use crate::services::{ServiceDefinition, ServiceUpdatePolicy};
+
+    for (name, service) in &document.spec.services {
+        let (logical, policy) = match service {
+            ServiceDefinition::Vllm(service) => (
+                format!("nemoclaw_inference_service.inference_{name}"),
+                service.update_policy,
+            ),
+            ServiceDefinition::Ollama(service) => (
+                format!("nemoclaw_ollama_service.{name}"),
+                service.update_policy,
+            ),
+            _ => continue,
+        };
+        if policy == ServiceUpdatePolicy::Recreate {
+            continue;
+        }
+        let address = crate::docker_compute::address(&logical);
+        if plan.resource_changes.iter().any(|change| {
+            let (before, after) = (&change.change.before, &change.change.after);
+            // Docker applies a lower memory limit to the running process, which
+            // the kernel can OOM-kill. Compilation labels memory limits to force
+            // replacement; this also refuses an in-place decrease.
+            let lowers_memory = || {
+                ["memory", "memory_swap"].iter().any(|field| {
+                    matches!(
+                        (before[field].as_i64(), after[field].as_i64()),
+                        (Some(old), Some(new)) if new < old
+                    )
+                })
+            };
+            change.address == address
+                && change.deposed.is_none()
+                && !before.is_null()
+                // The pinned Docker provider refreshes must_run to false for
+                // a stopped container. Unknown observations cannot authorize
+                // disrupting a model under the default preservation policy.
+                && before["must_run"] != false
+                && (change.change.actions.iter().any(|action| action == "delete")
+                    || lowers_memory())
+        }) {
+            return Err(Error::DockerModelUpdateRefused {
+                service: name.clone(),
+            });
+        }
+    }
+    Ok(())
 }
 
 impl Deployment {

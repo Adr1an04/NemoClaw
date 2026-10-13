@@ -11,7 +11,14 @@ use serde::{Deserialize, Serialize};
 #[serde(default, deny_unknown_fields)]
 /// Managed GPU Ollama service with an immutable runtime and model snapshot.
 pub struct ManagedOllama {
-    /// Optional IPC and shared-memory settings for the runtime container.
+    /// Preserve refuses replacement of a running Docker model container. Recreate permits sequential replacement and possible downtime until removed or changed.
+    #[serde(
+        rename = "updatePolicy",
+        default,
+        skip_serializing_if = "crate::services::ServiceUpdatePolicy::is_preserve"
+    )]
+    pub update_policy: crate::services::ServiceUpdatePolicy,
+    /// Container CPU and memory limits, IPC, and shared memory for Docker. Native managed Podman inference is unsupported. Omission uses private IPC and 8 GiB of shared memory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "ServiceContainer")]
     pub container: Option<ServiceContainer>,

@@ -40,6 +40,35 @@ fn kubernetes_cannot_select_a_managed_service_process() {
 }
 
 #[test]
+fn legacy_service_process_keeps_its_fields_without_cpu_limit() {
+    let fixtures: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+        "../../../nemoclaw-provider/src/managed/reference.json"
+    ))
+    .unwrap();
+    let raw: serde_json::Value =
+        serde_json::from_str(fixtures[1]["spec"].as_str().unwrap()).unwrap();
+    let process: Process = serde_json::from_value(raw["process"].clone()).unwrap();
+    assert_eq!(process.cpu_limit_millis, None);
+    assert_eq!(serde_json::to_value(process).unwrap(), raw["process"]);
+}
+
+#[test]
+fn zero_cpu_limit_is_rejected_before_native_container_creation() {
+    let fixtures: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+        "../../../nemoclaw-provider/src/managed/reference.json"
+    ))
+    .unwrap();
+    let mut raw: serde_json::Value =
+        serde_json::from_str(fixtures[1]["spec"].as_str().unwrap()).unwrap();
+    raw["process"]["cpu_limit_millis"] = json!(0);
+    let spec: Spec = serde_json::from_value(raw).unwrap();
+    assert!(matches!(
+        spec.container("/owned-data"),
+        Err(Error::Conflict("invalid managed service process"))
+    ));
+}
+
+#[test]
 fn image_pull_policy_does_not_change_container_configuration() {
     let fixtures: Vec<serde_json::Value> = serde_json::from_str(include_str!(
         "../../../nemoclaw-provider/src/managed/reference.json"

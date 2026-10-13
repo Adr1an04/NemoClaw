@@ -1,10 +1,26 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 use serde::{Deserialize, Serialize};
+
+/// Docker memory limit for a managed model container without container.memoryLimitGiB.
+pub(crate) const DEFAULT_MEMORY_LIMIT_GIB: u64 = 104;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-/// Managed inference IPC and shared-memory settings.
+/// Managed inference CPU and memory limits, IPC, and shared-memory settings.
 pub struct ServiceContainer {
+    /// CPU usage limit in millicores. Omission leaves Docker CPU usage unrestricted. Changing the limit replaces the model container.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32", range(min = 1, max = 4294967295_u64))]
+    pub cpu_limit_millis: Option<u32>,
+    /// Container memory limit in GiB, independent of the model's GPU budget. Omission retains Docker's 104 GiB limit. Changing the limit replaces the model container.
+    #[serde(
+        rename = "memoryLimitGiB",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[schemars(with = "u64", range(min = 1, max = 8589934591_u64))]
+    pub memory_limit_gib: Option<u64>,
     /// IPC namespace. Omission uses private; host shares the execution host's IPC namespace.
     #[serde(default)]
     pub ipc: ServiceIpc,
@@ -12,6 +28,26 @@ pub struct ServiceContainer {
     #[serde(default = "default_shm")]
     pub shared_memory_gi_b: u64,
 }
+
+impl ServiceContainer {
+    pub(crate) fn validate_memory(
+        &self,
+        preparation_memory_gib: u64,
+    ) -> Result<(), crate::config::ConfigError> {
+        if let Some(limit) = self.memory_limit_gib {
+            crate::config::validation::require(
+                self.ipc == ServiceIpc::Host || self.shared_memory_gi_b <= limit,
+                "container.memoryLimitGiB must cover container.sharedMemoryGiB for private IPC",
+            )?;
+            crate::config::validation::require(
+                preparation_memory_gib <= limit,
+                "container.memoryLimitGiB must cover recipe preparationMemoryGiB",
+            )?;
+        }
+        Ok(())
+    }
+}
+
 fn default_shm() -> u64 {
     8
 }
