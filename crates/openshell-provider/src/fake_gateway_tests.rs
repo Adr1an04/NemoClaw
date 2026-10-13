@@ -108,10 +108,172 @@ async fn sandbox_teardown_requires_owned_identity_but_not_its_previous_configura
     assert_eq!(fixture.state.lock().unwrap().delete_calls, 2);
 }
 
+#[tokio::test]
+async fn ready_sandbox_teardown_needs_owned_identity_but_not_active_policy_status() {
+    let fixture = Fixture::start().await;
+    let client = client(&fixture, Arc::new(EnvironmentSecrets));
+    let binding = create_sandbox(&client, "local").await;
+    let key = key(&binding);
+    let original = fixture.state.lock().unwrap().sandboxes[&key].clone();
+    fixture.state.lock().unwrap().fail_read = Some(("policy", tonic::Code::Unavailable));
+    assert!(client.read("sandbox", &binding, false).await.is_err());
+    let observed = client
+        .read("sandbox", &binding, true)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(observed, binding);
+    for field in ["id", "owner", "generation"] {
+        fixture
+            .state
+            .lock()
+            .unwrap()
+            .sandboxes
+            .insert(key.clone(), substituted(&original, field));
+        assert!(client.remove("sandbox", &binding, true).await.is_err());
+        assert_eq!(fixture.state.lock().unwrap().delete_calls, 0);
+    }
+    fixture
+        .state
+        .lock()
+        .unwrap()
+        .sandboxes
+        .insert(key.clone(), original);
+    client.remove("sandbox", &binding, true).await.unwrap();
+    let state = fixture.state.lock().unwrap();
+    assert_eq!(state.delete_calls, 1);
+    assert!(!state.sandboxes.contains_key(&key));
+}
+
 struct Keys;
 impl Secrets for Keys {
     fn resolve(&self, _: &str) -> Result<String, ObservationError> {
         Ok("owned-fixture-credential".into())
+    }
+}
+
+#[tokio::test]
+async fn gateway_validation_rejections_preserve_details_for_credential_free_mutations() {
+    const DETAIL: &str = "network endpoint ambiguity validation failed: network policies 'nemoclaw-inference-qwen' endpoint[0] (model.namespace.svc.cluster.local:18888/v1/**) and '_provider_qwen' endpoint[0] (model.namespace.svc.cluster.local:18888/v1/**) overlap on port(s) 18888 with conflicting metadata: allowed_ips=[] vs [\"10.96.189.228/32\"]";
+    for (rpc, kind, creating) in [
+        ("CreateWorkspace", "workspace", true),
+        ("CreateSandbox", "sandbox", true),
+        ("DeleteProvider", "provider", false),
+        ("DeleteProviderProfile", "provider_profile", false),
+    ] {
+        let fixture = Fixture::start().await;
+        let client = client(&fixture, Arc::new(Keys));
+        let rows = fixture_rows("hermes-auth");
+        let mut bindings = std::collections::BTreeMap::new();
+        for (row_kind, row) in &rows {
+            if creating && *row_kind == kind {
+                break;
+            }
+            let result = client.ensure(row_kind, row).await;
+            assert!(result.error().is_none(), "{row_kind}: {:?}", result.error());
+            bindings.insert(*row_kind, result.into_parts().0.unwrap());
+        }
+        let effects = fixture.state.lock().unwrap().effects;
+        fixture.state.lock().unwrap().reject_rpc =
+            Some((rpc, tonic::Code::FailedPrecondition, DETAIL.into()));
+        let error = if creating {
+            client
+                .ensure(
+                    kind,
+                    &rows
+                        .iter()
+                        .find(|(row_kind, _)| *row_kind == kind)
+                        .unwrap()
+                        .1,
+                )
+                .await
+                .error()
+                .unwrap()
+        } else {
+            client
+                .remove(kind, &bindings[kind], true)
+                .await
+                .unwrap_err()
+        };
+        let ObservationError::Rejected {
+            operation,
+            code,
+            detail,
+        } = error
+        else {
+            panic!("missing {rpc} rejection detail: {error}");
+        };
+        assert_eq!(operation, rpc);
+        assert_eq!(code, "FailedPrecondition");
+        assert_eq!(detail.as_ref(), DETAIL);
+        let state = fixture.state.lock().unwrap();
+        assert_eq!(state.rejected_rpcs, [rpc]);
+        assert_eq!(state.effects, effects);
+    }
+}
+
+#[tokio::test]
+async fn credential_requests_reads_and_exec_keep_backend_rejection_text_private() {
+    for rpc in [
+        "CreateProvider",
+        "UpdateProvider",
+        "GetSandbox",
+        "ExecSandbox",
+    ] {
+        let fixture = Fixture::start().await;
+        let client = client(&fixture, Arc::new(Keys));
+        let rows = fixture_rows("hermes-auth");
+        let mut bindings = std::collections::BTreeMap::new();
+        for (kind, row) in &rows {
+            if rpc == "CreateProvider" && *kind == "provider" {
+                break;
+            }
+            let result = client.ensure(kind, row).await;
+            assert!(result.error().is_none(), "{kind}: {:?}", result.error());
+            bindings.insert(*kind, result.into_parts().0.unwrap());
+        }
+        fixture.state.lock().unwrap().reject_rpc = Some((
+            rpc,
+            tonic::Code::FailedPrecondition,
+            "PRIVATE_SENTINEL".into(),
+        ));
+        let error = match rpc {
+            "CreateProvider" => client
+                .ensure(
+                    "provider",
+                    &rows.iter().find(|(kind, _)| *kind == "provider").unwrap().1,
+                )
+                .await
+                .error()
+                .unwrap(),
+            "UpdateProvider" => {
+                let mut provider = bindings["provider"].clone();
+                provider.insert("credential_env".into(), "SECOND_KEY".into());
+                client.ensure("provider", &provider).await.error().unwrap()
+            }
+            "GetSandbox" => client
+                .read("sandbox", &bindings["sandbox"], false)
+                .await
+                .unwrap_err(),
+            _ => {
+                let error = client
+                    .exec_bound(
+                        &bindings["sandbox"],
+                        vec!["true".into()],
+                        Default::default(),
+                        5,
+                    )
+                    .await
+                    .unwrap_err();
+                let nemoclaw_backend::Error::Observation(error) = error else {
+                    panic!("unexpected exec error: {error}");
+                };
+                error
+            }
+        };
+        assert_eq!(error, ObservationError::Query, "{rpc}");
+        assert!(!error.to_string().contains("PRIVATE_SENTINEL"));
+        assert_eq!(fixture.state.lock().unwrap().rejected_rpcs, [rpc]);
     }
 }
 

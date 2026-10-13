@@ -138,7 +138,7 @@ impl ConnectedOpenShellGateway {
                 ..Default::default()
             }))
             .await
-            .map_err(|error| remote_error(&error))?
+            .map_err(|error| nemoclaw_openshell::remote_rejection("CreateWorkspace", &error))?
             .into_inner();
         let row = base(response.workspace.and_then(|w| w.metadata), name, false)?;
         verify_identity(want, &row)?;
@@ -207,7 +207,7 @@ impl ConnectedOpenShellGateway {
                 }),
             )
             .await
-            .map_err(|error| remote_error(&error))?
+            .map_err(|error| nemoclaw_openshell::remote_rejection("CreateSandbox", &error))?
             .into_inner();
         let row = base(response.sandbox.and_then(|s| s.metadata), name, false)?;
         verify_identity(want, &row)?;
@@ -339,7 +339,12 @@ impl ConnectedOpenShellGateway {
         if let Err(status) = result
             && status.code() != tonic::Code::NotFound
         {
-            return Err(remote_error(&status));
+            let operation = if kind == "provider_profile" {
+                "DeleteProviderProfile"
+            } else {
+                "DeleteProvider"
+            };
+            return Err(nemoclaw_openshell::remote_rejection(operation, &status));
         }
         Ok(())
     }

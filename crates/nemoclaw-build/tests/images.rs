@@ -57,3 +57,34 @@ fn builds_require_one_of_the_qualified_platforms() {
     let error = plan(Path::new("."), "linux/riscv64", &["agents".into()]).unwrap_err();
     assert!(error.contains("--platform"), "{error}");
 }
+
+#[test]
+fn harnesses_missing_from_the_selected_platform_name_the_platforms_that_build_them() {
+    // Plans with Bake's print mode only; nothing is built.
+    if !std::process::Command::new("docker")
+        .args(["buildx", "version"])
+        .output()
+        .is_ok_and(|output| output.status.success())
+    {
+        eprintln!("skipping: docker buildx is unavailable");
+        return;
+    }
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let error = plan(&root, "linux/amd64", &["openclaw".into(), "hermes".into()]).unwrap_err();
+    assert_eq!(
+        error,
+        "hermes is built only for linux/arm64; linux/amd64 builds deepagents, openclaw (docs/build.md#build-agent-images)"
+    );
+    let planned = |platform, name: &str| {
+        plan(&root, platform, &[name.into()])
+            .unwrap()
+            .into_iter()
+            .map(|(target, _)| target)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(planned("linux/amd64", "openclaw"), ["openclaw"]);
+    assert_eq!(planned("linux/arm64", "hermes"), ["hermes"]);
+    // Selections that are not harnesses keep Bake's own resolution.
+    assert_eq!(planned("linux/amd64", "dummy"), ["dummy"]);
+    assert!(plan(&root, "linux/amd64", &["no-such-target".into()]).is_err());
+}

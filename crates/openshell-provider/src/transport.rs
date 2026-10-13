@@ -196,7 +196,7 @@ impl ConnectedOpenShellGateway {
                     return Ok(None);
                 };
                 let (row, ready) = sandbox_row(response, name, removing)?;
-                if ready {
+                if ready && !removing {
                     let status = self
                         .client
                         .raw_grpc()

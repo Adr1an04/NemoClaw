@@ -105,7 +105,13 @@ mod tests {
             let staged = workspace
                 .path()
                 .join(crate::executable("terraform-provider-nemoclaw"));
-            let output = Command::new(&staged).output().unwrap();
+            // OpenTofu executes the staged provider, so staging must keep the
+            // executable bit even though this test runs it through /bin/sh.
+            assert_ne!(
+                fs::metadata(&staged).unwrap().permissions().mode() & 0o111,
+                0
+            );
+            let output = Command::new("/bin/sh").arg(&staged).output().unwrap();
             assert!(output.status.success());
             assert_eq!(output.stdout, selected.as_bytes());
             assert_eq!(fs::read_to_string(&provider).unwrap(), script);

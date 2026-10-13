@@ -47,6 +47,13 @@ Every provider type has a [lifecycle test](contributing/integration-tests.md) th
 These tests do not qualify a complete standalone deployment workflow.
 Do not edit SDK-generated graphs or share a deployment state directory between independently managed workflows.
 
+### Gateway Profile Format Upgrade
+
+The OpenShell 0.1.3 integration stores provider-profile metadata in separate annotations.
+Gateway profiles created by earlier bundles used one `nemoclaw.nvidia.com/profile-v1` annotation; the current provider cannot read that format and reports an identity mismatch during plan, apply, or destroy.
+There is no automatic migration.
+This gateway-side format break is separate from the provider-type change described above.
+
 ## Provider Catalog
 
 The bundle pins these providers:

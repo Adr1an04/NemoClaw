@@ -173,6 +173,28 @@ pub fn export_metadata(image: &str, platform: &str, output: &Path) -> Result<()>
     Ok(())
 }
 
+/// Harness images Bake's `agents` matrix builds for `platform`, in name order.
+fn platform_harnesses(root: &Path, platform: &str) -> Result<Vec<String>> {
+    // Bake prints progress on stderr; show it only when listing fails.
+    let listed = docker()
+        .current_dir(root)
+        .env("AGENT_PLATFORM", platform)
+        .args(["buildx", "bake", "--print", "agents"])
+        .output()
+        .map_err(|_| "cannot run docker to list the agent images".to_owned())?;
+    if !listed.status.success() {
+        eprint!("{}", String::from_utf8_lossy(&listed.stderr));
+        return Err(format!("docker failed to list the {platform} agent images"));
+    }
+    let plan: Value = serde_json::from_slice(&listed.stdout).map_err(|_| "unreadable bake plan")?;
+    Ok(plan["target"]
+        .as_object()
+        .ok_or("bake plan has no targets")?
+        .keys()
+        .cloned()
+        .collect())
+}
+
 /// Bake targets for `selection`, each with the tags it should publish locally.
 pub fn plan(
     root: &Path,
@@ -181,6 +203,35 @@ pub fn plan(
 ) -> Result<Vec<(String, Vec<String>)>> {
     if !PLATFORMS.contains(&platform) {
         return Err(format!("choose --platform {}", PLATFORMS.join(" or ")));
+    }
+    // Bake reports a harness outside this platform's matrix only as an unknown
+    // target. Name the platforms that build it instead; other selections, such
+    // as groups or the reference image, keep Bake's own resolution.
+    let supported = platform_harnesses(root, platform)?;
+    let mut others = None;
+    for name in selection.iter().filter(|name| !supported.contains(name)) {
+        if others.is_none() {
+            others = Some(
+                PLATFORMS
+                    .into_iter()
+                    .filter(|other| *other != platform)
+                    .map(|other| Ok((other, platform_harnesses(root, other)?)))
+                    .collect::<Result<Vec<_>>>()?,
+            );
+        }
+        let building: Vec<&str> = others
+            .iter()
+            .flatten()
+            .filter(|(_, harnesses)| harnesses.contains(name))
+            .map(|(other, _)| *other)
+            .collect();
+        if !building.is_empty() {
+            return Err(format!(
+                "{name} is built only for {}; {platform} builds {} (docs/build.md#build-agent-images)",
+                building.join(" and "),
+                supported.join(", ")
+            ));
+        }
     }
     let printed = output(
         docker()
