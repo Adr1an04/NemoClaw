@@ -16,6 +16,7 @@ COPY Dockerfile build.json /opt/nemoclaw/source/
 ENTRYPOINT ["/usr/local/bin/nemoclaw-runtime"]
 CMD []
 LABEL org.nemoclaw.inference.authentication="bearer-v1" \
+      org.nemoclaw.inference.routes="openai-v2" \
       org.nemoclaw.backend="vllm" \
       org.nemoclaw.recipe.protocol="v1" \
       org.nemoclaw.feature.ple="1" \

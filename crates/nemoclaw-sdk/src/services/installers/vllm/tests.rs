@@ -159,3 +159,63 @@ fn every_runtime_contract_setting_has_an_opentofu_attribute() {
     let snapshot = object(&recipe["snapshot"].shape);
     assert!(matches!(snapshot["files"].shape, Shape::ObjectList(_)));
 }
+
+#[test]
+fn bearer_vllm_listens_on_loopback_beside_the_published_port_with_otherwise_unchanged_arguments() {
+    let after = |arguments: &[String], flag: &str| {
+        arguments
+            .iter()
+            .position(|argument| argument == flag)
+            .unwrap()
+            + 1
+    };
+    let mut service = service();
+    for (port, backend) in [(18888, "18889"), (65535, "65534")] {
+        service.serving.port = port;
+        service.authentication = None;
+        let mut expected = arguments::arguments(&service, "/data/model", 121 * GIB).unwrap();
+        let (host, listen) = (after(&expected, "--host"), after(&expected, "--port"));
+        assert_eq!(expected[host], "0.0.0.0");
+        assert_eq!(expected[listen], port.to_string());
+        // Bearer vLLM listens only on loopback, behind the supervisor's route
+        // filter on the published port; nothing else in its launch changes.
+        expected[host] = "127.0.0.1".into();
+        expected[listen] = backend.into();
+        service.authentication = Some(super::ServiceAuthentication::Bearer);
+        let bearer = arguments::arguments(&service, "/data/model", 121 * GIB).unwrap();
+        assert_eq!(bearer, expected, "{port}");
+    }
+}
+
+#[test]
+fn bearer_docker_install_requires_an_image_that_restricts_routes() {
+    let document =
+        Document::parse(include_str!("../../../../tests/fixtures/config/spark.yaml").as_bytes())
+            .unwrap();
+    let mut service = service();
+    let generations = [(super::SERVICE_KIND.into(), "a".repeat(32))].into();
+    service.authentication = Some(super::ServiceAuthentication::Bearer);
+    let (_, spec) = super::targets(&document, "qwen", &service, &generations).unwrap();
+    let labels = spec.process.unwrap().image_labels;
+    assert_eq!(
+        labels
+            .get("org.nemoclaw.inference.authentication")
+            .map(String::as_str),
+        Some("bearer-v1")
+    );
+    assert_eq!(
+        labels
+            .get("org.nemoclaw.inference.routes")
+            .map(String::as_str),
+        Some("openai-v2")
+    );
+    service.authentication = None;
+    let (_, spec) = super::targets(&document, "qwen", &service, &generations).unwrap();
+    assert!(
+        !spec
+            .process
+            .unwrap()
+            .image_labels
+            .contains_key("org.nemoclaw.inference.routes")
+    );
+}

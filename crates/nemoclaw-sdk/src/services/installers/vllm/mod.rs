@@ -88,6 +88,7 @@ fn targets(
             "org.nemoclaw.inference.authentication".into(),
             "bearer-v1".into(),
         );
+        image_labels.insert("org.nemoclaw.inference.routes".into(), "openai-v2".into());
     }
     let placed = crate::services::placement::ResolvedPlacement::resolve(
         service.published_placement()?,
