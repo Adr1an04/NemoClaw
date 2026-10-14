@@ -65,12 +65,16 @@ fn legacy_intent_is_rejected_without_rewriting_recovery_state() {
     )
     .unwrap();
     let mut record = Record::new(document).unwrap();
-    record.version = 6;
-    let bytes = serde_json::to_vec(&record).unwrap();
-    let path = dir.path().join("intent.json");
-    std::fs::write(&path, &bytes).unwrap();
-    assert!(store.load().is_err());
-    assert_eq!(std::fs::read(path).unwrap(), bytes);
+    // Version 10 records bind fabric_agent_configuration resources, which no
+    // provider serves since typed Fabric agents.
+    for version in [6, 10] {
+        record.version = version;
+        let bytes = serde_json::to_vec(&record).unwrap();
+        let path = dir.path().join("intent.json");
+        std::fs::write(&path, &bytes).unwrap();
+        assert!(store.load().is_err(), "version {version}");
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+    }
 }
 
 #[test]
@@ -573,7 +577,7 @@ fn pending_recovery_requires_matching_current_bindings_and_retains_unknown_creat
     record.begin_apply(&document, pending);
     let mut bindings: BTreeMap<_, _> = targets
         .iter()
-        .filter(|target| target.kind != "agent_configuration")
+        .filter(|target| target.kind != "agent")
         .map(|target| {
             let get = |key: &str| target.values.get(key).cloned().unwrap_or_default();
             (
@@ -609,7 +613,7 @@ fn pending_recovery_requires_matching_current_bindings_and_retains_unknown_creat
         assert!(retained.pending(), "{field}");
         let unresolved = retained.pending_creations;
         assert!(unresolved.contains_key(sandbox));
-        assert!(unresolved.contains_key("fabric_agent_configuration.assistant"));
+        assert!(unresolved.contains_key("fabric_agent.assistant"));
     }
     let missing = bindings
         .keys()
