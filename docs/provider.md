@@ -80,6 +80,7 @@ None of them exposes ephemeral resources or provider functions.
 | `openshell_workspace` | Workspace |
 | `openshell_provider_registration` | Provider registration |
 | `openshell_provider_profile` | Provider profile |
+| `openshell_inference` | [An inference server's provider and its profile](#inference-providers) |
 | `openshell_web_search` | [A web search provider and its profile](#web-search) |
 | `openshell_sandbox` | Sandbox |
 | `openshell_gateway` data source | [Gateway version and compute drivers](#gateway-capabilities) |
@@ -132,7 +133,7 @@ Other inputs are typed too:
   The block's attributes and blocks follow the sandbox policy model with snake_case names: optional `explicit` policy and `managed` deployment grants, whose named network rules are labeled blocks.
   A matcher that is either a glob or alternatives sets `value` for the glob, or `any` for the alternatives.
 - `openshell_provider_profile` takes a `binaries` list.
-- `openshell_sandbox`'s `providers` takes the `ref` of a registration, of type `openshell_provider`, from either `openshell_provider_registration` or `openshell_web_search`. Each ref names the OpenShell registration it attaches in `registration`.
+- `openshell_sandbox`'s `providers` takes the `ref` of a registration, of type `openshell_provider`, from `openshell_provider_registration`, `openshell_inference`, or `openshell_web_search`. Each ref names the OpenShell registration it attaches in `registration`.
 - `launch_json` is a JSON-encoded launch: the command, environment, and metadata to start the sandbox, the policy used when no explicit policy is authored, and the executables managed endpoint grants allow.
   OpenShell merges that policy with the authored `policy` block and managed grants, and records the launch with the sandbox; it does not depend on the agent runtime that produced the launch.
   `fabric_harnesses` returns `launch_json` for its configured agent, and Fabric reads its agent name and runtime binding back from the launch metadata.
@@ -161,6 +162,34 @@ resource "openshell_sandbox" "assistant" {
       }
     }
   }
+}
+```
+
+#### Inference Providers
+
+`openshell_inference` registers an inference server with OpenShell, together with the provider profile sandboxes use to reach it.
+It takes:
+
+- `workspace`, a workspace `ref`. The objects belong to the workspace's owner, so the resource takes no `owner`.
+- `name`, the registration's name. The profile is named `nemoclaw-inference-<name>`.
+- `server`, the `ref` of a readiness read: `vllm_readiness`, `ollama_readiness`, `ollama_proxy_readiness`, or `openshell_external_inference_server`. It supplies the endpoint and the variable or source of the credential. The provider reads a key during apply, so the key never enters OpenTofu state.
+- `api`: `openai-completions`, `openai-responses`, or `anthropic-messages`.
+- `binaries`, the executables allowed to call the server.
+- Optional `cluster_source`, passed to the profile as `openshell_provider_profile` takes it.
+
+Plans reject a missing `server` or `binaries`; the schema lists them as optional for the same reason as web search's inputs.
+Any change to an input replaces the resource, including a changed endpoint or credential in the server's `ref`, and removal deletes both objects.
+A sandbox that attaches it also needs a policy that allows traffic to the server's endpoint.
+Its `ref` has type `openshell_provider`, so sandboxes take it in `providers`.
+
+```hcl
+resource "openshell_inference" "nemotron" {
+  gateway   = data.openshell_gateway.current.ref
+  workspace = openshell_workspace.example.ref
+  name      = "nemotron"
+  server    = data.ollama_readiness.nemotron.ref
+  api       = "openai-completions"
+  binaries  = ["/usr/local/bin/pi"]
 }
 ```
 
@@ -360,7 +389,7 @@ For reconstructible resources, OpenTofu and the provider own confirmed absence, 
 | Resource | Reconciliation | Protection |
 |---|---|---|
 | Provider profile and registration | Update supported fields, replace immutable configuration, remove unused declarations, and recreate after confirmed absence | Verify ownership and established identity before mutation; preserve bindings on failed observation |
-| Web search | Create the profile and then the registration; replace on any input change or when either object is missing | The same checks for both objects; a failure between them records the identity, so the next apply replaces the resource |
+| Inference and web search | Create the profile and then the registration; replace on any input change or when either object is missing | The same checks for both objects; a failure between them records the identity, so the next apply replaces the resource |
 | Fabric runtime configuration | Apply the public Fabric document and reconcile its resource lifecycle | Verify the parent sandbox identity; a changed configuration can restart its runtime and lose native session state |
 | Sandbox | Create and observe the declared sandbox | During apply, refuse deletion, replacement, or recreation of a missing binding because deletion loses agent files and history |
 | Workspace | Create, observe, and retain | Refuse replacement, deletion, or automatic recreation of a missing binding |
@@ -830,8 +859,7 @@ A system test applies it unchanged against the bundle's providers.
 Writing one by hand:
 
 - Install the providers from a bundle: name its `providers` directory as a filesystem mirror, and pin each NVIDIA provider to the bundle's version. Development bundles carry pre-release versions, which OpenTofu selects only when pinned exactly.
-- Place model servers with any platform from `vllm_runtime` or `ollama_runtime`'s [`launch` and `requirements`](#vllm-runtime-contract), confirm them with [endpoint readiness](#runtime-capacity-and-readiness), and register `ref.endpoint`. Registrations will take the `ref` itself ([#13228](https://github.com/NVIDIA/NemoClaw/issues/13228)).
+- Place model servers with any platform from `vllm_runtime` or `ollama_runtime`'s [`launch` and `requirements`](#vllm-runtime-contract), confirm them with [endpoint readiness](#runtime-capacity-and-readiness), and register them with [`openshell_inference`](#inference-providers), passing the readiness read's `ref` as `server`.
 - Inference registrations currently accept plain HTTP only to a literal loopback or private IP address; [#13232](https://github.com/NVIDIA/NemoClaw/issues/13232) leaves destination checks to OpenShell, which also accepts its gateway-host alias `host.openshell.internal`.
-- Name an inference profile `nemoclaw-inference-<registration name>`. Its registration finds it by that name, without a `profile` input, and must share its `owner` and `generation`.
 - Register web search with [`openshell_web_search`](#web-search), which owns its profile.
 - Workspaces are retained, so `tofu destroy` cannot tear such a configuration down yet ([#13230](https://github.com/NVIDIA/NemoClaw/issues/13230)).

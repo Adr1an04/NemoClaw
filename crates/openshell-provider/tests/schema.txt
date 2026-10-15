@@ -23,6 +23,19 @@ resource openshell_gateway_storage (version 0)
   network_cidr: string, required
   owner: string, optional, computed
 
+resource openshell_inference (version 2)
+  api: string, required
+  binaries: list(string), optional
+  cluster_source: string, optional, computed
+  gateway: object({ credential_env = string, endpoint = string, tls_ca_env = string, tls_certificate_env = string, tls_key_env = string, type = string }), required
+  generation: string, optional, computed
+  id: string, computed
+  name: string, required
+  ref: object({ generation = string, id = string, name = string, owner = string, registration = string, type = string, workspace = string }), computed
+  registration: string, computed
+  server: object({ credential_env = string, credential_source = string, endpoint = string, type = string }), optional
+  workspace: object({ name = string, owner = string, type = string }), required
+
 resource openshell_kubernetes_auth (version 0)
   authentication_profile: string, required
   compute_driver: string, required

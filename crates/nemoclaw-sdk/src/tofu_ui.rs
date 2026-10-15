@@ -69,6 +69,7 @@ impl Ui {
             Some("openshell_provider_registration") => "provider",
             Some("openshell_provider_profile") => "provider profile",
             Some("openshell_web_search") => "web search",
+            Some("openshell_inference") => "inference provider",
             Some("openshell_podman_gateway") => "gateway",
             Some("openshell_gateway_storage") => "gateway storage",
             Some("docker_container") => "container",

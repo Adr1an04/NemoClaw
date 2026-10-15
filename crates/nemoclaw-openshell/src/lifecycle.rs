@@ -19,7 +19,7 @@ pub fn openshell_lifecycle(kind: &str) -> Option<OpenShellLifecycle> {
     match object_kind(kind) {
         "workspace" => Some(OpenShellLifecycle::Retained),
         "sandbox" => Some(OpenShellLifecycle::Stateful),
-        "provider" | "provider_profile" | "web_search" | "agent" => {
+        "provider" | "provider_profile" | "web_search" | "inference" | "agent" => {
             Some(OpenShellLifecycle::Reconstructible)
         }
         _ => None,
@@ -27,11 +27,12 @@ pub fn openshell_lifecycle(kind: &str) -> Option<OpenShellLifecycle> {
 }
 
 /// The `openshell` provider's resource type name, after its prefix, for each object kind.
-pub const RESOURCE_TYPES: [(&str, &str); 5] = [
+pub const RESOURCE_TYPES: [(&str, &str); 6] = [
     ("workspace", "workspace"),
     ("provider", "provider_registration"),
     ("provider_profile", "provider_profile"),
     ("web_search", "web_search"),
+    ("inference", "inference"),
     ("sandbox", "sandbox"),
 ];
 
@@ -86,6 +87,7 @@ pub fn type_name(kind: &str) -> &'static str {
         "provider" => "openshell_provider_registration",
         "provider_profile" => "openshell_provider_profile",
         "web_search" => "openshell_web_search",
+        "inference" => "openshell_inference",
         "sandbox" => "openshell_sandbox",
         _ => "",
     }
@@ -98,7 +100,7 @@ pub const PROVIDER_TYPE: &str = "openshell_provider";
 /// The type of the `ref` an object kind exports.
 pub fn ref_type(kind: &str) -> &'static str {
     match kind {
-        "provider" | "web_search" => PROVIDER_TYPE,
+        "provider" | "web_search" | "inference" => PROVIDER_TYPE,
         kind => type_name(kind),
     }
 }
@@ -110,7 +112,7 @@ pub fn registration_name(
 ) -> Option<String> {
     let value = |field: &str| values.get(field).map(String::as_str).unwrap_or_default();
     match kind {
-        "provider" => Some(value("name").to_owned()),
+        "provider" | "inference" => Some(value("name").to_owned()),
         "web_search" => {
             let provider = crate::search::SearchProvider::from_name(value("provider_type"))?;
             Some(

@@ -27,7 +27,7 @@ pub fn structured_inputs(kind: &str) -> Vec<Structured> {
         shape,
     };
     match kind {
-        "provider_profile" | "web_search" => {
+        "provider_profile" | "web_search" | "inference" => {
             vec![input("binaries", "binaries_json", strings())]
         }
         "sandbox" => vec![input("policy", "policy_json", policy_input())],
@@ -40,7 +40,7 @@ pub fn export(kind: &str) -> Option<Export> {
     let fields: &[&'static str] = match kind {
         "workspace" => &["name", "owner", "generation", "id"],
         // Registrations name what sandboxes attach: `registration`.
-        "provider" | "web_search" => &[
+        "provider" | "web_search" | "inference" => &[
             "workspace",
             "name",
             "registration",
@@ -59,6 +59,10 @@ pub fn export(kind: &str) -> Option<Export> {
 
 /// The type of the gateway's `ref`, which `data.openshell_gateway` exports.
 pub const GATEWAY_TYPE: &str = "openshell_gateway";
+
+/// The type of the `ref` a readiness read exports for a confirmed inference
+/// server, which inference registrations take as `server`.
+pub const INFERENCE_SERVER_TYPE: &str = "inference_server";
 
 /// How to reach a gateway: `(ref attribute, row field)` for each part of
 /// its `ref`. Rows carry them without the gateway observing them.
@@ -117,6 +121,26 @@ fn object_references(kind: &str) -> Vec<Reference> {
             fields: vec![("name", "workspace"), ("owner", "owner")],
             list: false,
         }],
+        // An inference registration belongs to its workspace's owner and
+        // reaches the server a readiness read confirmed.
+        "inference" => vec![
+            Reference {
+                attribute: "workspace",
+                kind: "openshell_workspace",
+                fields: vec![("name", "workspace"), ("owner", "owner")],
+                list: false,
+            },
+            Reference {
+                attribute: "server",
+                kind: INFERENCE_SERVER_TYPE,
+                fields: vec![
+                    ("endpoint", "endpoint"),
+                    ("credential_env", "credential_env"),
+                    ("credential_source", "credential_source"),
+                ],
+                list: false,
+            },
+        ],
         "provider" => vec![
             workspace,
             Reference {

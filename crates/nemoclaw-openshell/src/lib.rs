@@ -24,8 +24,8 @@ pub use connection::{
 };
 pub use driver::ComputeDriver;
 pub use inputs::{
-    GATEWAY_FIELDS, GATEWAY_TYPE, export, flatten, gateway_reference, references,
-    structured_inputs, without_gateway,
+    GATEWAY_FIELDS, GATEWAY_TYPE, INFERENCE_SERVER_TYPE, export, flatten, gateway_reference,
+    references, structured_inputs, without_gateway,
 };
 pub use lifecycle::{
     INSTALLATION_TYPES, OpenShellLifecycle, PROVIDER_TYPE, RESOURCE_TYPES, installation_type,

@@ -30,6 +30,7 @@ mod gateway_readiness;
 // clients reach.
 #[cfg(unix)]
 mod gateway_storage;
+mod inference;
 mod kubernetes_hcl;
 mod kubernetes_lifecycle;
 mod standalone;
@@ -194,6 +195,7 @@ fn every_type_has_a_contract_test() {
         include_str!("gateway_storage.rs"),
         include_str!("kubernetes_hcl.rs"),
         include_str!("kubernetes_lifecycle.rs"),
+        include_str!("inference.rs"),
         include_str!("standalone.rs"),
         include_str!("web_search.rs"),
     ]

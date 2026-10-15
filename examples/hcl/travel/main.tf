@@ -165,27 +165,15 @@ resource "openshell_workspace" "travel" {
   name    = "travel"
 }
 
-# An inference profile is named nemoclaw-inference-<registration name>.
-resource "openshell_provider_profile" "nemotron" {
-  gateway       = local.gateway
-  workspace     = openshell_workspace.travel.ref
-  owner         = openshell_workspace.travel.owner
-  name          = "nemoclaw-inference-nemotron"
-  endpoint      = data.ollama_readiness.nemotron.ref.endpoint
-  authenticated = "false"
-  binaries      = local.pi_launch.binaries
-}
-
-resource "openshell_provider_registration" "nemotron" {
+# Registers the confirmed server with OpenShell, with the profile Pi uses to
+# reach it.
+resource "openshell_inference" "nemotron" {
   gateway   = local.gateway
   workspace = openshell_workspace.travel.ref
-  owner     = openshell_workspace.travel.owner
   name      = "nemotron"
-  # An inference registration uses the profile named after it, and shares its
-  # owner and generation.
-  generation = openshell_provider_profile.nemotron.generation
-  # Until registrations take the server ref (#13228), pass its endpoint.
-  endpoint = data.ollama_readiness.nemotron.ref.endpoint
+  server    = data.ollama_readiness.nemotron.ref
+  api       = "openai-completions"
+  binaries  = local.pi_launch.binaries
 }
 
 resource "openshell_sandbox" "travel" {
@@ -195,7 +183,7 @@ resource "openshell_sandbox" "travel" {
   name        = "travel"
   image       = var.pi_image
   launch_json = data.fabric_harness.pi.launch_json
-  providers   = [openshell_provider_registration.nemotron.ref]
+  providers   = [openshell_inference.nemotron.ref]
   policy {
     managed "travel-nemotron" {
       name = "travel-nemotron"

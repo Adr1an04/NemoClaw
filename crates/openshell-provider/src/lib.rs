@@ -8,6 +8,7 @@ mod tests;
 
 pub mod agent;
 mod client;
+mod composite;
 mod connected;
 #[cfg(feature = "installation")]
 mod external_inference;
@@ -15,9 +16,8 @@ mod gateway_source;
 mod network;
 mod profile;
 mod provider;
-mod web_search;
+pub use composite::{inference_rows, web_search_rows};
 pub use nemoclaw_openshell::{policy::policy_json, profile::definition as inference_profile};
-pub use web_search::rows as web_search_rows;
 mod inference;
 use inference::{PROVIDERS_ENV, inference_environment};
 use network::{row_policy, validate_row_policy};
@@ -349,11 +349,11 @@ fn web_search_registration(known: &Row, unknown: &[&str]) -> Option<String> {
     {
         return None;
     }
-    nemoclaw_openshell::registration_name(web_search::KIND, known)
+    nemoclaw_openshell::registration_name(composite::WEB_SEARCH, known)
 }
 
 /// OpenShell objects and their planning rules.
-pub fn definitions() -> [nemoclaw_tofu::Definition; 5] {
+pub fn definitions() -> [nemoclaw_tofu::Definition; 6] {
     use nemoclaw_tofu::Definition;
     [
         Definition::new("workspace", &["name", "owner", "generation"], &[]),
@@ -391,7 +391,7 @@ pub fn definitions() -> [nemoclaw_tofu::Definition; 5] {
         // not the schema: an observation reports them empty when their half
         // of the pair is missing, which shows as drift.
         Definition::new(
-            web_search::KIND,
+            composite::WEB_SEARCH,
             &[
                 "workspace",
                 "name",
@@ -405,6 +405,36 @@ pub fn definitions() -> [nemoclaw_tofu::Definition; 5] {
         )
         .optional(&["credential_env", "binaries_json"])
         .derived("registration", web_search_registration),
+        // An inference server's profile and registration, as one resource
+        // whose owner is its workspace's and whose endpoint and credential
+        // come from the server's ref. Every input names them, so changes
+        // replace. The schema lists the server's fields and `binaries` as
+        // optional, and plans require them, for the same reason as web
+        // search's.
+        Definition::new(
+            composite::INFERENCE,
+            &[
+                "workspace",
+                "name",
+                "owner",
+                "generation",
+                "endpoint",
+                "credential_env",
+                "credential_source",
+                "api",
+                "binaries_json",
+                "cluster_source",
+            ],
+            &[],
+        )
+        .optional(&[
+            "endpoint",
+            "credential_env",
+            "credential_source",
+            "binaries_json",
+            "cluster_source",
+        ])
+        .derived("registration", provider_registration),
         Definition::new(
             "provider_profile",
             &[
