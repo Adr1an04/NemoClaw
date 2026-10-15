@@ -83,7 +83,7 @@ async fn endpoint_readiness_waits_for_the_served_model_and_exports_the_server_re
     };
     let run = |args: &[&str]| workspace.command().args(args).output().unwrap();
     let endpoint = format!(
-        "  endpoint         = \"{}/v1\"\n  sandbox_endpoint = \"http://host.openshell.internal:18898/v1\"\n",
+        "  endpoint         = \"{}/v1\"\n  sandbox_endpoint = \"http://10.0.0.8:18898/v1\"\n",
         fixture.endpoint
     );
 
@@ -101,7 +101,7 @@ async fn endpoint_readiness_waits_for_the_served_model_and_exports_the_server_re
         server,
         json!({
             "type": "inference_server",
-            "endpoint": "http://host.openshell.internal:18898/v1",
+            "endpoint": "http://10.0.0.8:18898/v1",
             "model": "qwen"
         })
     );
@@ -112,6 +112,23 @@ async fn endpoint_readiness_waits_for_the_served_model_and_exports_the_server_re
     assert!(!planned.status.success());
     let stderr = String::from_utf8_lossy(&planned.stderr);
     assert!(stderr.contains("qwen"), "{stderr}");
+
+    // The ref's endpoint is what registrations accept: plain HTTP only to a
+    // literal loopback or private address.
+    write(
+        "",
+        &format!(
+            "  endpoint         = \"{}/v1\"\n  sandbox_endpoint = \"http://host.openshell.internal:18898/v1\"\n",
+            fixture.endpoint
+        ),
+    );
+    let named = run(&["validate", "-no-color"]);
+    assert!(!named.status.success());
+    let stderr = String::from_utf8_lossy(&named.stderr);
+    assert!(
+        stderr.contains("sandbox_endpoint must be an address inference registrations accept"),
+        "{stderr}"
+    );
 
     // Endpoint and container inputs are separate modes.
     write(

@@ -60,6 +60,8 @@ mod spark;
 mod tls;
 #[path = "../../test-support/http.rs"]
 mod transport;
+#[path = "travel_example.rs"]
+mod travel_example;
 #[path = "web_search.rs"]
 mod web_search;
 

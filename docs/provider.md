@@ -633,7 +633,7 @@ Each readiness data source requires its `contract`, the `spec` of the runtime co
 It reads readiness in one of two modes:
 
 - **Container mode:** `engine`, `name`, and `container_id` name a Docker container; the read follows the container's status as described above.
-- **Endpoint mode:** `endpoint` is the server's OpenAI-compatible base URL, ending in `/v1`, that the provider can reach. The read polls `<endpoint>/models`, without following redirects, until the response lists the contract's served model; it needs no engine and works for a server on any platform. It serves unauthenticated contracts only and reports neither startup phase nor failure reason. Optional `sandbox_endpoint` is the base URL gateways and sandboxes use, defaulting to `endpoint`. A successful read exports `ref = { type = "inference_server", endpoint, model }`, with `sandbox_endpoint` as `endpoint`; container mode exports no `ref`. `ollama_proxy_readiness` supports container mode only.
+- **Endpoint mode:** `endpoint` is the server's OpenAI-compatible base URL, ending in `/v1`, that the provider can reach. The read polls `<endpoint>/models`, without following redirects, until the response lists the contract's served model; it needs no engine and works for a server on any platform. It serves unauthenticated contracts only and reports neither startup phase nor failure reason. Optional `sandbox_endpoint` is the base URL gateways and sandboxes use, defaulting to `endpoint`; like an inference registration's endpoint, over plain HTTP its host must be a literal loopback or private IP address. A successful read exports `ref = { type = "inference_server", endpoint, model }`, with `sandbox_endpoint` as `endpoint`; container mode exports no `ref`. `ollama_proxy_readiness` supports container mode only.
 
 Setting both modes' inputs fails validation, as does endpoint mode with an authenticated contract.
 Until inference registrations take the `ref`, pass its endpoint: `endpoint = data.vllm_readiness.NAME.ref.endpoint`.
@@ -642,7 +642,7 @@ Until inference registrations take the `ref`, pass its endpoint: `endpoint = dat
 data "vllm_readiness" "qwen" {
   contract         = data.vllm_runtime.qwen.spec
   endpoint         = "http://127.0.0.1:18898/v1"
-  sandbox_endpoint = "http://host.openshell.internal:18898/v1"
+  sandbox_endpoint = "http://10.0.0.8:18898/v1"
   read_trigger     = docker_container.qwen.id != ""
 }
 ```
@@ -771,4 +771,13 @@ The Docker and Helm providers have fixed release versions and checksum-pinned na
 The providers are not published yet ([#12638](https://github.com/NVIDIA/NemoClaw/issues/12638)).
 Supported HCL examples, import, adoption, remote-state backends and compatibility across releases are tracked in [#12645](https://github.com/NVIDIA/NemoClaw/issues/12645).
 
-Every resource and data source takes inputs that can be written in HCL, but this guide does not recommend a direct-use workflow.
+Every resource and data source takes inputs that can be written in HCL.
+[`examples/hcl/travel`](../examples/hcl/travel/main.tf) is a complete hand-written configuration: a Pi agent in an OpenShell sandbox, answering with a local Ollama server placed with Docker, and allowed only HTTPS `GET` requests to one site.
+A system test applies it unchanged against the bundle's providers.
+Writing one by hand:
+
+- Install the providers from a bundle: name its `providers` directory as a filesystem mirror, and pin each NVIDIA provider to the bundle's version. Development bundles carry pre-release versions, which OpenTofu selects only when pinned exactly.
+- Place model servers with any platform from `vllm_runtime` or `ollama_runtime`'s [`launch` and `requirements`](#vllm-runtime-contract), confirm them with [endpoint readiness](#runtime-capacity-and-readiness), and register `ref.endpoint`. Registrations will take the `ref` itself ([#13228](https://github.com/NVIDIA/NemoClaw/issues/13228)).
+- Inference registrations accept plain HTTP only to a literal loopback or private IP address.
+- Name an inference profile `nemoclaw-inference-<registration name>`. Its registration finds it by that name, without a `profile` input, and must share its `owner` and `generation`; `profile` names search providers' profiles.
+- Workspaces are retained, so `tofu destroy` cannot tear such a configuration down yet ([#13230](https://github.com/NVIDIA/NemoClaw/issues/13230)).

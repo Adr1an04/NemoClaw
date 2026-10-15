@@ -37,6 +37,7 @@ default-filter = '''
     | test(/^export_observations::/) | test(/^fabric_deployment::/)
     | test(/^multiple_providers::/) | test(/^remote_service::/)
     | test(/^inference_discovery::/) | test(/^helm_recovery::/)
+    | test(/^travel_example::/)
 ))
 '''
 
