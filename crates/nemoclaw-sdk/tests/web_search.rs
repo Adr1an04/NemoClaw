@@ -50,17 +50,13 @@ fn search_uses_owned_profile_and_provider_without_exporting_secrets() {
         .map(|key| (key.into(), "a".repeat(32)))
         .into();
     let rows = targets(&doc, &generations).unwrap();
-    assert_eq!(rows.len(), 6);
+    assert_eq!(rows.len(), 5);
     let search = rows.iter().find(|r| r.kind == "web_search").unwrap();
     assert_eq!(search.values["credential_env"], "SEARCH_KEY");
     assert_eq!(search.values["provider_type"], "brave");
     let graph = compile(&doc, &generations, "0.1.0").unwrap();
     assert!(
-        provider_scope::resource(
-            &graph["resource"]["openshell_provider_registration"],
-            "local"
-        )
-        .is_object()
+        provider_scope::resource(&graph["resource"]["openshell_inference"], "local").is_object()
     );
     // One resource owns the search profile and registration. Its executables
     // come from the sandbox's harness, and its owner from its workspace.
@@ -75,8 +71,8 @@ fn search_uses_owned_profile_and_provider_without_exporting_secrets() {
         graph["resource"]["openshell_sandbox"]["assistant"]["depends_on"],
         json!([
             provider_scope::address(
-                &graph["resource"]["openshell_provider_registration"],
-                "provider",
+                &graph["resource"]["openshell_inference"],
+                "inference",
                 "local"
             ),
             search.address,
@@ -137,8 +133,8 @@ fn shared_integration_references_grant_only_the_selected_agents() {
         graph["resource"]["openshell_sandbox"]["reader"]["depends_on"],
         json!([
             provider_scope::address(
-                &graph["resource"]["openshell_provider_registration"],
-                "provider",
+                &graph["resource"]["openshell_inference"],
+                "inference",
                 "local"
             ),
             "data.openshell_gateway.apply"
@@ -245,7 +241,7 @@ fn unused_definitions_create_no_search_resources_policy_or_secret_requirements()
         .map(|key| (key.into(), "a".repeat(32)))
         .into();
     let rows = targets(&doc, &generations).unwrap();
-    assert_eq!(rows.len(), 5);
+    assert_eq!(rows.len(), 4);
     assert!(!serde_json::to_string(&rows).unwrap().contains("brave"));
     assert!(!doc.credential_names().contains(&"SEARCH_KEY"));
     assert!(doc.yaml().unwrap().contains("SEARCH_KEY"));
@@ -369,8 +365,8 @@ fn sandboxes_share_search_registration_only_for_the_same_credential() {
             graph["resource"]["openshell_sandbox"][sandbox]["depends_on"],
             json!([
                 provider_scope::address(
-                    &graph["resource"]["openshell_provider_registration"],
-                    "provider",
+                    &graph["resource"]["openshell_inference"],
+                    "inference",
                     "local"
                 ),
                 selected.address,

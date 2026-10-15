@@ -78,14 +78,21 @@ pub fn assert_same_managed_resources(actual: &[u8], expected: &[u8]) {
     assert_eq!(managed(actual), managed(expected));
 }
 
-/// Credential variables the fixture's registrations and web search resources
-/// name, with fixture values.
+/// Credential variables the fixture's registrations, inference servers, and
+/// web search resources name, with fixture values.
 fn credentials(fixture: &Value) -> BTreeSet<String> {
-    ["openshell_provider_registration", "openshell_web_search"]
+    let direct = ["openshell_provider_registration", "openshell_web_search"]
         .into_iter()
         .filter_map(|kind| fixture["resource"][kind].as_object())
         .flat_map(|registrations| registrations.values())
-        .filter_map(|registration| registration["credential_env"].as_str())
+        .filter_map(|registration| registration["credential_env"].as_str());
+    let servers = fixture["resource"]["openshell_inference"]
+        .as_object()
+        .into_iter()
+        .flat_map(|registrations| registrations.values())
+        .filter_map(|registration| registration["server"]["credential_env"].as_str());
+    direct
+        .chain(servers)
         .filter(|name| !name.is_empty())
         .map(str::to_owned)
         .collect()
@@ -256,8 +263,7 @@ macro_rules! fixtures {
                 .collect();
             for kind in [
                 "openshell_workspace",
-                "openshell_provider_profile",
-                "openshell_provider_registration",
+                "openshell_inference",
                 "openshell_web_search",
                 "openshell_sandbox",
                 "openshell_gateway",

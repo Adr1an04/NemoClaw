@@ -40,19 +40,17 @@ impl OperationResult {
     pub(super) fn describe_sources(&mut self, document: &Document) -> Result<(), Error> {
         for provider in document.selected_providers()? {
             if provider.key != provider.definition.name {
-                for kind in ["provider", "provider_profile"] {
-                    self.resource_sources.insert(
-                        format!(
-                            "{}.inference_{}",
-                            crate::compile::resource_type(kind),
-                            provider.key
-                        ),
-                        ResourceSource {
-                            name: provider.definition.name.clone(),
-                            path: provider.path.clone(),
-                        },
-                    );
-                }
+                self.resource_sources.insert(
+                    format!(
+                        "{}.inference_{}",
+                        crate::compile::resource_type("inference"),
+                        provider.key
+                    ),
+                    ResourceSource {
+                        name: provider.definition.name.clone(),
+                        path: provider.path.clone(),
+                    },
+                );
             }
         }
         Ok(())
@@ -471,7 +469,7 @@ mod tests {
         let document = Document::parse(input.to_string().as_bytes()).unwrap();
         let mut result = OperationResult::planned(Vec::new());
         result.describe_sources(&document).unwrap();
-        assert_eq!(result.resource_sources.len(), 2);
+        assert_eq!(result.resource_sources.len(), 1);
         assert!(
             result
                 .resource_sources
@@ -494,7 +492,7 @@ mod tests {
         let document = Document::parse(input.to_string().as_bytes()).unwrap();
         let mut result = OperationResult::planned(Vec::new());
         result.describe_sources(&document).unwrap();
-        assert_eq!(result.resource_sources.len(), 2);
+        assert_eq!(result.resource_sources.len(), 1);
         assert!(
             result
                 .resource_sources

@@ -146,7 +146,7 @@ resource "openshell_sandbox" "assistant" {
   name         = "assistant"
   image        = var.image
   launch_json  = data.fabric_harnesses.assistant.launch_json
-  providers    = [openshell_provider_registration.local.ref]
+  providers    = [openshell_inference.local.ref]
   policy {
     explicit {
       version = 1
@@ -181,6 +181,7 @@ Plans reject a missing `server` or `binaries`; the schema lists them as optional
 Any change to an input replaces the resource, including a changed endpoint or credential in the server's `ref`, and removal deletes both objects.
 A sandbox that attaches it also needs a policy that allows traffic to the server's endpoint.
 Its `ref` has type `openshell_provider`, so sandboxes take it in `providers`.
+Generated graphs register each selected inference provider this way. Until they read servers ([#13228](https://github.com/NVIDIA/NemoClaw/issues/13228)), they pass a literal `inference_server` object built from the provider definition.
 
 ```hcl
 resource "openshell_inference" "nemotron" {
@@ -399,7 +400,7 @@ The registration's endpoint, provider type, and authentication mode require repl
 The graph orders registration deletion before profile deletion when both change.
 Standalone HCL must declare the matching configuration and dependency on its profile.
 Recreating an absent profile with unchanged configuration does not itself replace its registration.
-The SDK creates registrations only for definitions selected by sandboxes; unused YAML definitions have no resource lifecycle.
+Generated graphs create an `openshell_inference` only for definitions selected by sandboxes; unused YAML definitions have no resource lifecycle.
 The standalone provider supports registration removal and replacement, while removing a last selection in SDK YAML also changes the protected sandbox specification.
 Replacing a registration still attached to a protected sandbox is not a supported shortcut around sandbox lifecycle rules.
 Endpoint and policy changes that also change a sandbox's launch specification remain protected; see [change paths](usage.md#choose-the-change-path).

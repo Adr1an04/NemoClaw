@@ -183,18 +183,20 @@ fn compiled_resources_preserve_ownership_connections_and_dependency_order() {
     }
     let resources = &graph["resource"];
     let workspace = &resources["openshell_workspace"]["deployment"];
-    let provider =
-        &provider_scope::resource(&resources["openshell_provider_registration"], "remote");
-    let profile = &provider_scope::resource(&resources["openshell_provider_profile"], "remote");
+    let provider = &provider_scope::resource(&resources["openshell_inference"], "remote");
     let sandbox = &resources["openshell_sandbox"]["worker"];
     assert_eq!(workspace["name"], document.workspace());
     for (resource, generation) in [
         (workspace, "workspace"),
         (provider, "provider"),
-        (profile, "provider"),
         (sandbox, "sandbox"),
     ] {
-        assert_eq!(resource["owner"], document.metadata.uid);
+        // An inference provider's owner comes from its workspace ref.
+        if generation == "provider" {
+            assert!(resource.get("owner").is_none());
+        } else {
+            assert_eq!(resource["owner"], document.metadata.uid);
+        }
         assert_eq!(resource["generation"], generations[generation]);
         if generation == "provider" {
             assert!(resource["lifecycle"].get("prevent_destroy").is_none());
@@ -202,30 +204,22 @@ fn compiled_resources_preserve_ownership_connections_and_dependency_order() {
             assert_eq!(resource["lifecycle"]["prevent_destroy"], true);
         }
     }
-    assert_eq!(provider["credential_env"], "MODEL_TOKEN");
-    assert_eq!(provider["endpoint"], "https://models.example.test/v1");
-    assert_eq!(profile["authenticated"], "true");
-    assert!(
-        provider["depends_on"]
-            .as_array()
-            .unwrap()
-            .contains(&json!(provider_scope::address(
-                &resources["openshell_provider_profile"],
-                "provider_profile",
-                "remote"
-            )))
+    assert_eq!(provider["server"]["credential_env"], "MODEL_TOKEN");
+    assert_eq!(
+        provider["server"]["endpoint"],
+        "https://models.example.test/v1"
     );
     assert!(
         sandbox["depends_on"]
             .as_array()
             .unwrap()
             .contains(&json!(provider_scope::address(
-                &resources["openshell_provider_registration"],
-                "provider",
+                &resources["openshell_inference"],
+                "inference",
                 "remote"
             )))
     );
-    for resource in [provider, profile, sandbox] {
+    for resource in [provider, sandbox] {
         assert_eq!(
             resource["workspace"],
             "${openshell_workspace.deployment.ref}"
@@ -234,7 +228,6 @@ fn compiled_resources_preserve_ownership_connections_and_dependency_order() {
     for resource in [
         workspace,
         provider,
-        profile,
         sandbox,
         &resources["fabric_agent"]["worker"],
         &graph["data"]["fabric_agent_readiness"]["worker"],
@@ -254,11 +247,8 @@ fn compiled_resources_preserve_ownership_connections_and_dependency_order() {
         }
     }
     // Sandboxes name their provider registrations by ref.
-    let registration = provider_scope::address(
-        &resources["openshell_provider_registration"],
-        "provider",
-        "remote",
-    );
+    let registration =
+        provider_scope::address(&resources["openshell_inference"], "inference", "remote");
     assert!(
         sandbox["providers"]
             .as_array()
@@ -402,7 +392,7 @@ fn adding_an_image_keeps_existing_registration_and_separates_executable_scopes()
     let before = targets(&document, &generations).unwrap();
     let original = before
         .iter()
-        .find(|target| target.kind == "provider")
+        .find(|target| target.kind == "inference")
         .unwrap();
     let mut changed = document.clone();
     let mut second = changed.spec.sandboxes[0].clone();
@@ -414,7 +404,7 @@ fn adding_an_image_keeps_existing_registration_and_separates_executable_scopes()
     assert_eq!(
         after
             .iter()
-            .filter(|target| target.kind == "provider")
+            .filter(|target| target.kind == "inference")
             .count(),
         2
     );
@@ -433,7 +423,7 @@ fn adding_an_image_keeps_existing_registration_and_separates_executable_scopes()
                 .contains("fabric_harnesses")
         );
     }
-    for profile in graph["resource"]["openshell_provider_profile"]
+    for profile in graph["resource"]["openshell_inference"]
         .as_object()
         .unwrap()
         .values()

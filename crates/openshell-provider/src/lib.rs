@@ -16,7 +16,7 @@ mod gateway_source;
 mod network;
 mod profile;
 mod provider;
-pub use composite::{inference_rows, web_search_rows};
+pub use nemoclaw_openshell::pairs::{inference_rows, web_search_rows};
 pub use nemoclaw_openshell::{policy::policy_json, profile::definition as inference_profile};
 mod inference;
 use inference::{PROVIDERS_ENV, inference_environment};

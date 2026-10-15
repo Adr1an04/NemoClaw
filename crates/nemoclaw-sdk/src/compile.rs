@@ -4,7 +4,7 @@ use crate::config::InferenceProviderKind;
 
 use crate::{
     backend::Row,
-    config::{ConfigError, Document, InferenceProvider, SearchProvider},
+    config::{ConfigError, Document, InferenceProvider},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -221,7 +221,7 @@ fn targets_with_plans(
         {
             result
                 .iter_mut()
-                .find(|r| r.kind == "provider" && r.values["name"] == provider.key)
+                .find(|r| r.kind == "inference" && r.values["name"] == provider.key)
                 .unwrap()
                 .values
                 .insert("credential_source".into(), source);
@@ -246,7 +246,7 @@ fn inference_targets(
     provider: &InferenceProvider,
     key: &str,
     generations: &Generations,
-) -> Result<[Target; 2], ConfigError> {
+) -> Result<[Target; 1], ConfigError> {
     let connection = document.provider_connection(provider)?;
     let logical = format!("inference_{key}");
     let values: Row = [
@@ -267,33 +267,19 @@ fn inference_targets(
                 .unwrap_or_default(),
         ),
         (
-            "provider_type".into(),
+            "api".into(),
             match provider.provider {
-                InferenceProviderKind::Anthropic => "anthropic".into(),
-                InferenceProviderKind::Openai => String::new(),
+                InferenceProviderKind::Anthropic => "anthropic-messages".into(),
+                InferenceProviderKind::Openai => "openai-completions".into(),
             },
         ),
     ]
     .into();
-    let mut profile = values.clone();
-    profile.insert("name".into(), format!("nemoclaw-inference-{key}"));
-    profile.remove("credential_env");
-    profile.insert(
-        "authenticated".into(),
-        crate::services::provider_authenticated(document, provider)?.to_string(),
-    );
-    Ok([
-        Target {
-            kind: "provider_profile".into(),
-            address: format!("openshell_provider_profile.{logical}"),
-            values: profile,
-        },
-        Target {
-            kind: "provider".into(),
-            address: format!("openshell_provider_registration.{logical}"),
-            values,
-        },
-    ])
+    Ok([Target {
+        kind: "inference".into(),
+        address: format!("openshell_inference.{logical}"),
+        values,
+    }])
 }
 
 /// Compile only data. No filesystem access, backend calls, or runtime effects.
@@ -536,6 +522,17 @@ fn compile_with_plans(
                 attributes[reference.attribute] = json!(gateway_ref_expression());
                 continue;
             }
+            // The server a registration reaches, as the ref a readiness read
+            // would export for it.
+            if reference.kind == nemoclaw_openshell::INFERENCE_SERVER_TYPE {
+                let mut server = json!({"type": nemoclaw_openshell::INFERENCE_SERVER_TYPE});
+                for (attribute, field) in &reference.fields {
+                    let value = target.values.get(*field).cloned().unwrap_or_default();
+                    server[*attribute] = json!(value.replace("${", "$${").replace("%{", "%%{"));
+                }
+                attributes[reference.attribute] = server;
+                continue;
+            }
             // An agent's harness is the one its sandbox's image read selects.
             if reference.kind == nemoclaw_fabric::agent::HARNESS_TYPE {
                 let sandbox = &target.values[nemoclaw_fabric::agent::SANDBOX];
@@ -586,10 +583,10 @@ fn compile_with_plans(
                 json!(address(encoded)?)
             };
         }
-        if target.kind == "provider_profile" {
+        if target.kind == "inference" {
             attributes["binaries"] = json!(format!(
                 "${{jsondecode({}.binaries_json)}}",
-                profile_sources[&target.values["name"]]
+                profile_sources[&format!("nemoclaw-inference-{}", target.values["name"])]
             ));
         }
         if target.kind == "web_search" {
@@ -627,14 +624,8 @@ fn compile_with_plans(
         if let Some(dependencies) = service_plans.dependencies(&target.address) {
             attributes["depends_on"] = json!(dependencies);
         }
-        if target.kind == "provider"
-            && target
-                .values
-                .get("provider_type")
-                .is_none_or(|kind| SearchProvider::from_name(kind).is_none())
-        {
-            let logical = target.address.split_once('.').unwrap().1;
-            let mut dependencies = vec![format!("openshell_provider_profile.{logical}")];
+        if target.kind == "inference" {
+            let mut dependencies = Vec::new();
             if let Some(selected) = providers
                 .iter()
                 .find(|provider| provider.key == target.values["name"])
@@ -643,22 +634,6 @@ fn compile_with_plans(
                 dependencies.extend(service.resource_dependencies);
             }
             attributes["depends_on"] = json!(dependencies);
-        }
-        if target.kind == "provider"
-            && target
-                .values
-                .get("provider_type")
-                .and_then(|kind| SearchProvider::from_name(kind))
-                .is_some()
-        {
-            let profile = targets
-                .iter()
-                .find(|candidate| {
-                    candidate.kind == "provider_profile"
-                        && candidate.values["name"] == target.values["profile_name"]
-                })
-                .expect("search profile target");
-            attributes["depends_on"] = json!([profile.address]);
         }
         attributes
             .as_object_mut()

@@ -223,8 +223,7 @@ pub(crate) fn resource_label(address: &str) -> String {
                 ("docker_volume.inference_storage_inference_", "model cache/"),
                 ("openshell_sandbox.", "sandbox/"),
                 ("data.fabric_agent_readiness.", "sandbox readiness/"),
-                ("openshell_provider_registration.inference_", "provider/"),
-                ("openshell_provider_profile.inference_", "provider profile/"),
+                ("openshell_inference.inference_", "provider/"),
                 ("docker_image.", "image binding/"),
             ];
             mappings
@@ -265,11 +264,7 @@ fn styled_action(actions: &[String], palette: Palette) -> String {
 
 fn result_resource_label(result: &OperationResult, address: &str) -> String {
     if let Some(source) = result.resource_sources.get(address) {
-        let kind = if address.starts_with("openshell_provider_profile.") {
-            "provider profile"
-        } else {
-            "provider"
-        };
+        let kind = "provider";
         format!(
             "{kind}/{} at {}",
             terminal_text(&source.name),
@@ -811,16 +806,16 @@ mod tests {
     fn resource_results_name_authored_sources_and_separate_deferred_work() {
         let result = json!({"outcome":"planned", "changes":[
             {"resource":"fabric_agent.host", "actions":["update"]},
-            {"resource":"openshell_provider_registration.inference_local-1234", "actions":["update"]},
+            {"resource":"openshell_inference.inference_local-1234", "actions":["update"]},
             {"resource":"openshell_web_search.tavily_1234_search_key", "actions":["create"]},
             {"resource":"vllm_credential_storage.inference_tiny_auth", "actions":["create"]}
         ], "resourceSources": {
-            "openshell_provider_registration.inference_local-1234":{"name":"responses", "path":"spec.sandboxes[host].inferenceProviders[responses]"}
+            "openshell_inference.inference_local-1234":{"name":"responses", "path":"spec.sandboxes[host].inferenceProviders[responses]"}
         }, "deferred":["Gateway is required"], "deferredResources":[
             "docker_container.ollama_proxy_local", "data.ollama_model.local", "ollama_proxy_credential_storage.local", "docker_image.image_1234"
         ], "discovery":{"resources":[
             {"address":"fabric_agent.host", "scope":"deployment", "existed":true, "plannedActions":["update"], "drifted":true, "retained":false, "reusePlanned":false, "agentRunning":false},
-            {"address":"openshell_provider_registration.inference_local-1234", "scope":"deployment", "existed":true, "plannedActions":["update"], "drifted":false, "retained":false, "reusePlanned":false},
+            {"address":"openshell_inference.inference_local-1234", "scope":"deployment", "existed":true, "plannedActions":["update"], "drifted":false, "retained":false, "reusePlanned":false},
             {"address":"docker_container.managed_gateway_runtime", "scope":"runtime", "existed":true, "plannedActions":["no-op"], "drifted":true, "retained":false, "reusePlanned":false}
         ]}});
         let text = render(&["nemoclaw", "plan", "spark.yaml"], result.clone());
@@ -845,7 +840,7 @@ mod tests {
             &["nemoclaw", "plan", "spark.yaml", "--verbose"],
             result.clone(),
         );
-        assert!(verbose.contains("openshell_provider_registration.inference_local-1234"));
+        assert!(verbose.contains("openshell_inference.inference_local-1234"));
         let json: Value = serde_json::from_str(&render(
             &["nemoclaw", "plan", "spark.yaml", "-o", "json"],
             result.clone(),

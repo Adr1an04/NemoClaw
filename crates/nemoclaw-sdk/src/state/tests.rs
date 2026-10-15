@@ -71,8 +71,9 @@ fn legacy_intent_is_rejected_without_rewriting_recovery_state() {
     // to the vllm and ollama providers; version 12 records bind
     // nemoclaw_ollama_external_model, which data.ollama_model replaced;
     // version 13 records bind web search profiles and registrations, which
-    // openshell_web_search replaced.
-    for version in [6, 10, 11, 12, 13] {
+    // openshell_web_search replaced; version 14 records bind inference
+    // profiles and registrations, which openshell_inference replaced.
+    for version in [6, 10, 11, 12, 13, 14] {
         record.version = version;
         let bytes = serde_json::to_vec(&record).unwrap();
         let path = dir.path().join("intent.json");
@@ -622,7 +623,7 @@ fn pending_recovery_requires_matching_current_bindings_and_retains_unknown_creat
     }
     let missing = bindings
         .keys()
-        .find(|address| address.starts_with("openshell_provider_profile."))
+        .find(|address| address.starts_with("openshell_inference."))
         .unwrap()
         .clone();
     bindings.remove(&missing);

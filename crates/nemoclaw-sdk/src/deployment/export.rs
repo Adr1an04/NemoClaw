@@ -220,7 +220,7 @@ pub(super) fn exported(
         let mut expected = target.values;
         expected.insert("id".into(), observed["id"].clone());
         match target.kind.as_str() {
-            "provider" => export_provider(&mut document, &expected, &observed)?,
+            "inference" => export_provider(&mut document, &expected, &observed)?,
             "web_search" => export_web_search(&expected, &observed)?,
             "sandbox" => export_sandbox(&expected, &observed)?,
             _ => {}
@@ -312,7 +312,7 @@ fn consistent_provider_credentials(
     let mut credentials = BTreeMap::new();
     for target in compile::targets(document, generations)?
         .into_iter()
-        .filter(|target| target.kind == "provider")
+        .filter(|target| target.kind == "inference")
     {
         let Some(provider) = selected
             .iter()
@@ -352,7 +352,7 @@ fn export_web_search(expected: &Row, observed: &Row) -> Result<(), Error> {
 }
 
 fn export_provider(document: &mut Document, expected: &Row, observed: &Row) -> Result<(), Error> {
-    if observed["provider_type"] != expected["provider_type"]
+    if observed.get("api") != expected.get("api")
         || observed["endpoint"] != expected["endpoint"]
         || observed["credential_env"].is_empty() != expected["credential_env"].is_empty()
     {
@@ -555,7 +555,7 @@ mod tests {
         let mut observations: BTreeMap<String, Value> = compile::targets(&document, &generations)
             .unwrap()
             .into_iter()
-            .filter(|target| target.kind == "provider")
+            .filter(|target| target.kind == "inference")
             .map(|target| (target.address, json!({"credential_env":"SAME_KEY"})))
             .collect();
         assert_eq!(observations.len(), 2);
@@ -686,7 +686,7 @@ mod tests {
         compile::targets(document, &record.generations)
             .unwrap()
             .into_iter()
-            .find(|target| target.kind == "provider")
+            .find(|target| target.kind == "inference")
             .unwrap()
             .values
     }
@@ -799,7 +799,7 @@ mod tests {
         for (field, value) in [
             ("endpoint", "https://foreign.example/v1"),
             ("credential_env", "FOREIGN_KEY"),
-            ("provider_type", "anthropic"),
+            ("api", "anthropic-messages"),
         ] {
             let mut observed = expected.clone();
             observed.insert(field.into(), value.into());
@@ -832,7 +832,7 @@ mod tests {
             .unwrap()
             .into_iter()
             .find(|target| {
-                target.kind == "provider"
+                target.kind == "inference"
                     && target.values["endpoint"] == "https://hosted.example/v1"
             })
             .unwrap()

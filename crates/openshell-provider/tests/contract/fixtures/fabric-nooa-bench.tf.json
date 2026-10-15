@@ -30,40 +30,15 @@
     }
   },
   "resource": {
-    "openshell_provider_profile": {
+    "openshell_inference": {
       "inference_local-207e499ab0a3f54cec878921": {
-        "authenticated": "false",
+        "api": "openai-completions",
         "binaries": [
           "/usr/local/bin/python3.99"
         ],
         "depends_on": [
           "data.openshell_gateway.apply"
         ],
-        "endpoint": "http://172.20.0.1:11446/v1",
-        "gateway": "${data.openshell_gateway.current.ref}",
-        "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "lifecycle": {
-          "precondition": [
-            {
-              "condition": "${data.openshell_gateway.current.compatible}",
-              "error_message": "${format(\"Gateway is incompatible with this configuration: %s. Retain state, correct the gateway or the configuration, and reapply.\", data.openshell_gateway.current.incompatibility)}"
-            }
-          ]
-        },
-        "name": "nemoclaw-inference-local-207e499ab0a3f54cec878921",
-        "owner": "1533935c-7ff1-4c28-9a68-c42ef3dd2fb3",
-        "provider_type": "",
-        "workspace": "${openshell_workspace.deployment.ref}"
-      }
-    },
-    "openshell_provider_registration": {
-      "inference_local-207e499ab0a3f54cec878921": {
-        "credential_env": "",
-        "depends_on": [
-          "openshell_provider_profile.inference_local-207e499ab0a3f54cec878921",
-          "data.openshell_gateway.apply"
-        ],
-        "endpoint": "http://172.20.0.1:11446/v1",
         "gateway": "${data.openshell_gateway.current.ref}",
         "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "lifecycle": {
@@ -75,15 +50,19 @@
           ]
         },
         "name": "local-207e499ab0a3f54cec878921",
-        "owner": "1533935c-7ff1-4c28-9a68-c42ef3dd2fb3",
-        "provider_type": "",
+        "server": {
+          "credential_env": "",
+          "credential_source": "",
+          "endpoint": "http://172.20.0.1:11446/v1",
+          "type": "inference_server"
+        },
         "workspace": "${openshell_workspace.deployment.ref}"
       }
     },
     "openshell_sandbox": {
       "assistant": {
         "depends_on": [
-          "openshell_provider_registration.inference_local-207e499ab0a3f54cec878921",
+          "openshell_inference.inference_local-207e499ab0a3f54cec878921",
           "data.openshell_gateway.apply"
         ],
         "gateway": "${data.openshell_gateway.current.ref}",
@@ -122,7 +101,7 @@
           }
         },
         "providers": [
-          "${openshell_provider_registration.inference_local-207e499ab0a3f54cec878921.ref}"
+          "${openshell_inference.inference_local-207e499ab0a3f54cec878921.ref}"
         ],
         "workspace": "${openshell_workspace.deployment.ref}"
       }

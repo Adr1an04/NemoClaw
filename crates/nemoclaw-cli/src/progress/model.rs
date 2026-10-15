@@ -270,8 +270,7 @@ fn supporting_resource(address: &str) -> bool {
     ) || [
         "data.docker_image.image_",
         "docker_image.image_",
-        "openshell_provider_profile.inference_",
-        "openshell_provider_registration.inference_",
+        "openshell_inference.inference_",
     ]
     .iter()
     .any(|prefix| address.starts_with(prefix))

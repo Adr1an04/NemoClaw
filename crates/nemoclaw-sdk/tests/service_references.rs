@@ -42,10 +42,10 @@ fn declared_services_install_once_and_service_ref_selects_the_inference_connecti
             .any(|target| target.address == "docker_container.ollama_service_unused")
     );
     let graph = compile(&document, &generations, "0.1.0").unwrap();
-    assert_eq!(
-        provider_scope::resource(&graph["resource"]["openshell_provider_profile"], "local")["authenticated"],
-        "false"
-    );
+    let server =
+        &provider_scope::resource(&graph["resource"]["openshell_inference"], "local")["server"];
+    assert_eq!(server["credential_env"], "");
+    assert_eq!(server["credential_source"], "");
     assert_eq!(
         document.inference_endpoint().unwrap(),
         "http://172.20.0.1:18888/v1"

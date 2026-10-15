@@ -11,6 +11,7 @@ mod inputs;
 mod lifecycle;
 mod names;
 mod observation;
+pub mod pairs;
 pub mod policy;
 pub mod profile;
 pub mod runtime;

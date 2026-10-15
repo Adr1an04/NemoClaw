@@ -134,13 +134,15 @@ async fn missing_selected_provider_reconciles_without_sandbox_changes() {
         initial
             .changes
             .iter()
-            .find(|change| change
-                .resource
-                .starts_with("openshell_provider_registration."))
+            .find(|change| change.resource.starts_with("openshell_inference."))
             .unwrap()
             .resource
     );
-    assert_eq!(recreated.changes[0].actions, ["create"]);
+    // The profile survived without its registration, so the inference
+    // resource is replaced: removal deletes the profile and creation
+    // recreates both, identically because the graph sets the generation.
+    // The sandbox is unaffected.
+    assert_eq!(recreated.changes[0].actions, ["delete", "create"]);
     assert_eq!(fixture.state.lock().unwrap().sandboxes, sandbox);
     assert_eq!(fixture.state.lock().unwrap().profiles, profile);
     assert_eq!(fixture.state.lock().unwrap().providers.len(), 1);
@@ -334,7 +336,7 @@ async fn interrupted_create_preserves_pending_targets_allows_unrelated_intent_an
     let effects = fixture.state.lock().unwrap().effects;
     assert_eq!(effects, 4);
     let preview = deployment.plan_destroy(&cancel).await.unwrap();
-    assert_eq!(preview.changes.len(), 4);
+    assert_eq!(preview.changes.len(), 3);
     assert_eq!(fixture.state.lock().unwrap().effects, effects);
     let destroyed = Command::new(
         bundle
@@ -367,7 +369,7 @@ async fn interrupted_create_preserves_pending_targets_allows_unrelated_intent_an
             .unwrap()
             .changes
             .len(),
-        4
+        3
     );
 }
 
@@ -983,7 +985,7 @@ async fn destroy_does_not_require_the_inference_credential_or_rewrite_its_refere
             .unwrap()
             .changes
             .len(),
-        4
+        3
     );
     assert_eq!(fixture.state.lock().unwrap().effects, effects);
     // Teardown initializes the stage once to read its bindings and once for
@@ -1253,7 +1255,7 @@ async fn mixed_sandboxes_reorder_add_recover_export_and_destroy_independently() 
     let cancel = CancellationToken::new();
     let preview = deployment.plan(&document, &cancel).await.unwrap();
     // Each image/adapter scope owns its provider registration and executable grants.
-    assert_eq!(preview.changes.len(), 9);
+    assert_eq!(preview.changes.len(), 7);
     assert_eq!(fixture.state.lock().unwrap().effects, 0);
     let applied = deployment.apply(&document, &cancel).await.unwrap();
     assert_eq!(applied.health.len(), 2);
@@ -2055,7 +2057,7 @@ async fn scoped_provider_labels_and_stopped_runtime_plans_preserve_authored_iden
         } else {
             let result: serde_json::Value = serde_json::from_str(&text).unwrap();
             let sources = result["resourceSources"].as_object().unwrap();
-            assert_eq!(sources.len(), 2);
+            assert_eq!(sources.len(), 1);
             assert!(sources.values().all(|source| source["name"] == "responses"
                 && source["path"] == "spec.sandboxes[assistant].inferenceProviders[responses]"));
             let resource = result["discovery"]["resources"]
