@@ -221,6 +221,7 @@ pub(super) fn exported(
         expected.insert("id".into(), observed["id"].clone());
         match target.kind.as_str() {
             "provider" => export_provider(&mut document, &expected, &observed)?,
+            "web_search" => export_web_search(&expected, &observed)?,
             "sandbox" => export_sandbox(&expected, &observed)?,
             _ => {}
         }
@@ -335,24 +336,22 @@ fn consistent_provider_credentials(
     Ok(())
 }
 
-fn export_provider(document: &mut Document, expected: &Row, observed: &Row) -> Result<(), Error> {
-    // Search targets come from selected integrations, not inference definitions.
-    // Keep their authored scopes and credential references unchanged on export.
+/// Web search comes from selected integrations, not inference definitions:
+/// export keeps their authored scopes and credential references unchanged,
+/// and refuses when the deployed resource drifted from them.
+fn export_web_search(expected: &Row, observed: &Row) -> Result<(), Error> {
     if expected
-        .get("provider_type")
-        .and_then(|kind| crate::config::SearchProvider::from_name(kind))
-        .is_some()
+        .iter()
+        .any(|(key, value)| observed.get(key) != Some(value))
     {
-        if expected
-            .iter()
-            .any(|(key, value)| observed.get(key) != Some(value))
-        {
-            return Err(Error::Conflict(
-                "web search provider drift requires inspection",
-            ));
-        }
-        return Ok(());
+        return Err(Error::Conflict(
+            "web search provider drift requires inspection",
+        ));
     }
+    Ok(())
+}
+
+fn export_provider(document: &mut Document, expected: &Row, observed: &Row) -> Result<(), Error> {
     if observed["provider_type"] != expected["provider_type"]
         || observed["endpoint"] != expected["endpoint"]
         || observed["credential_env"].is_empty() != expected["credential_env"].is_empty()
@@ -720,16 +719,15 @@ mod tests {
                     .unwrap()
                     .into_iter()
                     .find(|target| {
-                        target.kind == "provider" && target.values["provider_type"] == provider
+                        target.kind == "web_search" && target.values["provider_type"] == provider
                     })
                     .unwrap()
                     .values;
-                let mut exported = document.clone();
-                export_provider(&mut exported, &expected, &expected).unwrap();
+                let exported = document.clone();
+                export_web_search(&expected, &expected).unwrap();
                 assert_eq!(exported, document, "{provider}/{scope}");
                 for field in [
                     "provider_type",
-                    "endpoint",
                     "credential_env",
                     "name",
                     "workspace",
@@ -744,7 +742,7 @@ mod tests {
                             observed.remove(field);
                         }
                         assert!(
-                            export_provider(&mut exported, &expected, &observed).is_err(),
+                            export_web_search(&expected, &observed).is_err(),
                             "{provider}/{scope}/{field}/{replacement:?}"
                         );
                         assert_eq!(exported, document);

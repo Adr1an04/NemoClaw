@@ -69,8 +69,10 @@ fn legacy_intent_is_rejected_without_rewriting_recovery_state() {
     // provider serves since typed Fabric agents; version 11 records bind
     // nemoclaw_inference_storage and nemoclaw_ollama_proxy_storage, which moved
     // to the vllm and ollama providers; version 12 records bind
-    // nemoclaw_ollama_external_model, which data.ollama_model replaced.
-    for version in [6, 10, 11, 12] {
+    // nemoclaw_ollama_external_model, which data.ollama_model replaced;
+    // version 13 records bind web search profiles and registrations, which
+    // openshell_web_search replaced.
+    for version in [6, 10, 11, 12, 13] {
         record.version = version;
         let bytes = serde_json::to_vec(&record).unwrap();
         let path = dir.path().join("intent.json");

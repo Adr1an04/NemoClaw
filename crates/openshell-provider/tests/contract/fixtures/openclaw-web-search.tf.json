@@ -54,27 +54,6 @@
         "owner": "3a1c6038-a264-48e1-a2b3-1ed10c9f6919",
         "provider_type": "",
         "workspace": "${openshell_workspace.deployment.ref}"
-      },
-      "web_search_54ddc3957cbfbf3583497dae": {
-        "binaries": [
-          "/usr/local/bin/python3.99"
-        ],
-        "depends_on": [
-          "data.openshell_gateway.apply"
-        ],
-        "gateway": "${data.openshell_gateway.current.ref}",
-        "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "lifecycle": {
-          "precondition": [
-            {
-              "condition": "${data.openshell_gateway.current.compatible}",
-              "error_message": "${format(\"Gateway is incompatible with this configuration: %s. Retain state, correct the gateway or the configuration, and reapply.\", data.openshell_gateway.current.incompatibility)}"
-            }
-          ]
-        },
-        "name": "nemoclaw-brave-54ddc3957cbfbf3583497dae",
-        "owner": "3a1c6038-a264-48e1-a2b3-1ed10c9f6919",
-        "workspace": "${openshell_workspace.deployment.ref}"
       }
     },
     "openshell_provider_registration": {
@@ -99,36 +78,13 @@
         "owner": "3a1c6038-a264-48e1-a2b3-1ed10c9f6919",
         "provider_type": "",
         "workspace": "${openshell_workspace.deployment.ref}"
-      },
-      "web_search_1626583d632727f0192ac4fc": {
-        "credential_env": "BRAVE_API_KEY",
-        "depends_on": [
-          "openshell_provider_profile.web_search_54ddc3957cbfbf3583497dae",
-          "data.openshell_gateway.apply"
-        ],
-        "endpoint": "https://api.search.brave.com",
-        "gateway": "${data.openshell_gateway.current.ref}",
-        "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "lifecycle": {
-          "precondition": [
-            {
-              "condition": "${data.openshell_gateway.current.compatible}",
-              "error_message": "${format(\"Gateway is incompatible with this configuration: %s. Retain state, correct the gateway or the configuration, and reapply.\", data.openshell_gateway.current.incompatibility)}"
-            }
-          ]
-        },
-        "name": "brave-search-1626583d632727f0192ac4fc",
-        "owner": "3a1c6038-a264-48e1-a2b3-1ed10c9f6919",
-        "profile": "${openshell_provider_profile.web_search_54ddc3957cbfbf3583497dae.ref}",
-        "provider_type": "brave",
-        "workspace": "${openshell_workspace.deployment.ref}"
       }
     },
     "openshell_sandbox": {
       "researcher": {
         "depends_on": [
           "openshell_provider_registration.inference_local-d6ca74ad95e4f1d5f302f50e",
-          "openshell_provider_registration.web_search_1626583d632727f0192ac4fc",
+          "openshell_web_search.brave_54ddc3957cbfbf3583497dae_brave_api_key",
           "data.openshell_gateway.apply"
         ],
         "gateway": "${data.openshell_gateway.current.ref}",
@@ -148,7 +104,7 @@
         "policy": {
           "explicit": null,
           "managed": {
-            "nemoclaw-brave-54ddc3957cbfbf3583497dae": {
+            "nemoclaw-brave-99b08272cb899ab383a5f890": {
               "binaries": [],
               "endpoints": [
                 {
@@ -166,7 +122,7 @@
                   ]
                 }
               ],
-              "name": "nemoclaw-brave-54ddc3957cbfbf3583497dae"
+              "name": "nemoclaw-brave-99b08272cb899ab383a5f890"
             },
             "nemoclaw-inference-local-d6ca74ad95e4f1d5f302f50e": {
               "binaries": [],
@@ -188,14 +144,14 @@
         },
         "providers": [
           "${openshell_provider_registration.inference_local-d6ca74ad95e4f1d5f302f50e.ref}",
-          "${openshell_provider_registration.web_search_1626583d632727f0192ac4fc.ref}"
+          "${openshell_web_search.brave_54ddc3957cbfbf3583497dae_brave_api_key.ref}"
         ],
         "workspace": "${openshell_workspace.deployment.ref}"
       },
       "writer": {
         "depends_on": [
           "openshell_provider_registration.inference_local-d6ca74ad95e4f1d5f302f50e",
-          "openshell_provider_registration.web_search_1626583d632727f0192ac4fc",
+          "openshell_web_search.brave_54ddc3957cbfbf3583497dae_brave_api_key",
           "data.openshell_gateway.apply"
         ],
         "gateway": "${data.openshell_gateway.current.ref}",
@@ -215,7 +171,7 @@
         "policy": {
           "explicit": null,
           "managed": {
-            "nemoclaw-brave-54ddc3957cbfbf3583497dae": {
+            "nemoclaw-brave-99b08272cb899ab383a5f890": {
               "binaries": [],
               "endpoints": [
                 {
@@ -233,7 +189,7 @@
                   ]
                 }
               ],
-              "name": "nemoclaw-brave-54ddc3957cbfbf3583497dae"
+              "name": "nemoclaw-brave-99b08272cb899ab383a5f890"
             },
             "nemoclaw-inference-local-d6ca74ad95e4f1d5f302f50e": {
               "binaries": [],
@@ -255,8 +211,32 @@
         },
         "providers": [
           "${openshell_provider_registration.inference_local-d6ca74ad95e4f1d5f302f50e.ref}",
-          "${openshell_provider_registration.web_search_1626583d632727f0192ac4fc.ref}"
+          "${openshell_web_search.brave_54ddc3957cbfbf3583497dae_brave_api_key.ref}"
         ],
+        "workspace": "${openshell_workspace.deployment.ref}"
+      }
+    },
+    "openshell_web_search": {
+      "brave_54ddc3957cbfbf3583497dae_brave_api_key": {
+        "binaries": [
+          "/usr/local/bin/python3.99"
+        ],
+        "credential_env": "BRAVE_API_KEY",
+        "depends_on": [
+          "data.openshell_gateway.apply"
+        ],
+        "gateway": "${data.openshell_gateway.current.ref}",
+        "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "lifecycle": {
+          "precondition": [
+            {
+              "condition": "${data.openshell_gateway.current.compatible}",
+              "error_message": "${format(\"Gateway is incompatible with this configuration: %s. Retain state, correct the gateway or the configuration, and reapply.\", data.openshell_gateway.current.incompatibility)}"
+            }
+          ]
+        },
+        "name": "54ddc3957cbfbf3583497dae",
+        "provider_type": "brave",
         "workspace": "${openshell_workspace.deployment.ref}"
       }
     },

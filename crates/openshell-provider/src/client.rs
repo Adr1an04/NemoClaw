@@ -216,6 +216,9 @@ pub struct OpenShellBackend(pub Arc<GatewayClient>);
 #[async_trait]
 impl Backend for OpenShellBackend {
     async fn plan(&self, kind: &str, desired: &Row, prior: Option<&Row>) -> Result<(), Error> {
+        if kind == crate::web_search::KIND {
+            return crate::web_search::plan(self, desired, prior).await;
+        }
         self.0
             .planning_client(desired)?
             .plan(kind, desired, prior)
@@ -227,9 +230,15 @@ impl Backend for OpenShellBackend {
         prior: &Row,
         removing: bool,
     ) -> Result<Option<Row>, ObservationError> {
+        if kind == crate::web_search::KIND {
+            return crate::web_search::read(self, prior, removing).await;
+        }
         self.0.client_for(prior)?.read(kind, prior, removing).await
     }
     async fn ensure(&self, kind: &str, desired: &Row) -> Mutation {
+        if kind == crate::web_search::KIND {
+            return crate::web_search::ensure(self, desired).await;
+        }
         match self.0.client_for(desired) {
             Ok(client) => client.ensure(kind, desired).await,
             Err(error) => Mutation::failed(error),
@@ -241,6 +250,9 @@ impl Backend for OpenShellBackend {
         prior: &Row,
         destroying: bool,
     ) -> Result<(), ObservationError> {
+        if kind == crate::web_search::KIND {
+            return crate::web_search::remove(self, prior, destroying).await;
+        }
         self.0
             .client_for(prior)?
             .remove(kind, prior, destroying)

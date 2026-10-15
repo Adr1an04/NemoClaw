@@ -15,7 +15,9 @@ mod gateway_source;
 mod network;
 mod profile;
 mod provider;
+mod web_search;
 pub use nemoclaw_openshell::{policy::policy_json, profile::definition as inference_profile};
+pub use web_search::rows as web_search_rows;
 mod inference;
 use inference::{PROVIDERS_ENV, inference_environment};
 use network::{row_policy, validate_row_policy};
@@ -333,8 +335,25 @@ pub fn verify_identity(expected: &Row, observed: &Row) -> Result<(), Observation
     Ok(())
 }
 
+/// The registration a provider row registers: its name.
+fn provider_registration(known: &Row, unknown: &[&str]) -> Option<String> {
+    (!unknown.contains(&"name")).then(|| known.get("name").cloned().unwrap_or_default())
+}
+
+/// The registration a web search row registers, derived from the inputs that
+/// name it.
+fn web_search_registration(known: &Row, unknown: &[&str]) -> Option<String> {
+    if ["name", "provider_type", "credential_env"]
+        .iter()
+        .any(|field| unknown.contains(field))
+    {
+        return None;
+    }
+    nemoclaw_openshell::registration_name(web_search::KIND, known)
+}
+
 /// OpenShell objects and their planning rules.
-pub fn definitions() -> [nemoclaw_tofu::Definition; 4] {
+pub fn definitions() -> [nemoclaw_tofu::Definition; 5] {
     use nemoclaw_tofu::Definition;
     [
         Definition::new("workspace", &["name", "owner", "generation"], &[]),
@@ -364,7 +383,28 @@ pub fn definitions() -> [nemoclaw_tofu::Definition; 4] {
         ])
         // Omission selects the default, not the previous selection.
         .reset_when_omitted(&["credential_env", "credential_source", "provider_type"])
-        .replaces(authentication_mode_changes),
+        .replaces(authentication_mode_changes)
+        .derived("registration", provider_registration),
+        // A web search provider's profile and registration, as one resource
+        // whose owner is its workspace's. Every input names them, so changes
+        // replace. `credential_env` and `binaries` are required by plans,
+        // not the schema: an observation reports them empty when their half
+        // of the pair is missing, which shows as drift.
+        Definition::new(
+            web_search::KIND,
+            &[
+                "workspace",
+                "name",
+                "owner",
+                "generation",
+                "provider_type",
+                "credential_env",
+                "binaries_json",
+            ],
+            &[],
+        )
+        .optional(&["credential_env", "binaries_json"])
+        .derived("registration", web_search_registration),
         Definition::new(
             "provider_profile",
             &[

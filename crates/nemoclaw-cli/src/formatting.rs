@@ -192,10 +192,12 @@ pub(crate) fn resource_label(address: &str) -> String {
         "openshell_gateway_storage.runtime" => "gateway storage".to_owned(),
         "openshell_workspace.deployment" => "OpenShell workspace".to_owned(),
         _ => {
-            // Search registration hashes distinguish credentials in state. The
-            // default label names the integration; verbose retains its address.
-            if address.starts_with("openshell_provider_registration.web_search_tavily_") {
-                return "web search provider/tavily".into();
+            // Web search addresses carry an image scope and credential reference
+            // to distinguish them in state. The default label names the search
+            // provider; verbose retains the address.
+            if let Some(rest) = address.strip_prefix("openshell_web_search.") {
+                let provider = rest.split('_').next().unwrap_or_default();
+                return terminal_text(&format!("web search/{provider}"));
             }
             if let Some(name) = address
                 .strip_prefix("vllm_credential_storage.inference_")
@@ -205,10 +207,6 @@ pub(crate) fn resource_label(address: &str) -> String {
             }
             let mappings = [
                 ("fabric_agent.", "agent runtime/"),
-                (
-                    "openshell_provider_profile.web_search_",
-                    "web search profile/",
-                ),
                 ("data.ollama_model.", "Ollama model/"),
                 ("ollama_proxy_credential_storage.", "proxy credentials/"),
                 ("docker_container.ollama_proxy_", "ollama proxy/"),
@@ -814,8 +812,7 @@ mod tests {
         let result = json!({"outcome":"planned", "changes":[
             {"resource":"fabric_agent.host", "actions":["update"]},
             {"resource":"openshell_provider_registration.inference_local-1234", "actions":["update"]},
-            {"resource":"openshell_provider_registration.web_search_tavily_1234", "actions":["create"]},
-            {"resource":"openshell_provider_profile.web_search_tavily", "actions":["create"]},
+            {"resource":"openshell_web_search.tavily_1234_search_key", "actions":["create"]},
             {"resource":"vllm_credential_storage.inference_tiny_auth", "actions":["create"]}
         ], "resourceSources": {
             "openshell_provider_registration.inference_local-1234":{"name":"responses", "path":"spec.sandboxes[host].inferenceProviders[responses]"}
@@ -830,8 +827,7 @@ mod tests {
         for expected in [
             "agent runtime/host",
             "provider/responses at spec.sandboxes[host].inferenceProviders[responses]",
-            "web search provider/tavily",
-            "web search profile/tavily",
+            "web search/tavily",
             "inference credentials/tiny",
             "ollama proxy/local",
             "Ollama model/local",

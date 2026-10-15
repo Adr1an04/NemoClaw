@@ -27,7 +27,9 @@ pub fn structured_inputs(kind: &str) -> Vec<Structured> {
         shape,
     };
     match kind {
-        "provider_profile" => vec![input("binaries", "binaries_json", strings())],
+        "provider_profile" | "web_search" => {
+            vec![input("binaries", "binaries_json", strings())]
+        }
         "sandbox" => vec![input("policy", "policy_json", policy_input())],
         _ => Vec::new(),
     }
@@ -37,13 +39,20 @@ pub fn structured_inputs(kind: &str) -> Vec<Structured> {
 pub fn export(kind: &str) -> Option<Export> {
     let fields: &[&'static str] = match kind {
         "workspace" => &["name", "owner", "generation", "id"],
-        "provider" | "provider_profile" | "sandbox" => {
-            &["workspace", "name", "owner", "generation", "id"]
-        }
+        // Registrations name what sandboxes attach: `registration`.
+        "provider" | "web_search" => &[
+            "workspace",
+            "name",
+            "registration",
+            "owner",
+            "generation",
+            "id",
+        ],
+        "provider_profile" | "sandbox" => &["workspace", "name", "owner", "generation", "id"],
         _ => return None,
     };
     Some(Export {
-        kind: type_name(kind),
+        kind: crate::ref_type(kind),
         fields: fields.to_vec(),
     })
 }
@@ -101,6 +110,13 @@ fn object_references(kind: &str) -> Vec<Reference> {
     };
     match kind {
         "provider_profile" => vec![workspace],
+        // A web search registration belongs to its workspace's owner.
+        "web_search" => vec![Reference {
+            attribute: "workspace",
+            kind: "openshell_workspace",
+            fields: vec![("name", "workspace"), ("owner", "owner")],
+            list: false,
+        }],
         "provider" => vec![
             workspace,
             Reference {
@@ -114,8 +130,8 @@ fn object_references(kind: &str) -> Vec<Reference> {
             workspace,
             Reference {
                 attribute: "providers",
-                kind: "openshell_provider_registration",
-                fields: vec![("name", "provider_names_json")],
+                kind: crate::PROVIDER_TYPE,
+                fields: vec![("registration", "provider_names_json")],
                 list: true,
             },
         ],

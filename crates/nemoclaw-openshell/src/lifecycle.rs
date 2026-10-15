@@ -19,16 +19,19 @@ pub fn openshell_lifecycle(kind: &str) -> Option<OpenShellLifecycle> {
     match object_kind(kind) {
         "workspace" => Some(OpenShellLifecycle::Retained),
         "sandbox" => Some(OpenShellLifecycle::Stateful),
-        "provider" | "provider_profile" | "agent" => Some(OpenShellLifecycle::Reconstructible),
+        "provider" | "provider_profile" | "web_search" | "agent" => {
+            Some(OpenShellLifecycle::Reconstructible)
+        }
         _ => None,
     }
 }
 
 /// The `openshell` provider's resource type name, after its prefix, for each object kind.
-pub const RESOURCE_TYPES: [(&str, &str); 4] = [
+pub const RESOURCE_TYPES: [(&str, &str); 5] = [
     ("workspace", "workspace"),
     ("provider", "provider_registration"),
     ("provider_profile", "provider_profile"),
+    ("web_search", "web_search"),
     ("sandbox", "sandbox"),
 ];
 
@@ -82,8 +85,39 @@ pub fn type_name(kind: &str) -> &'static str {
         "workspace" => "openshell_workspace",
         "provider" => "openshell_provider_registration",
         "provider_profile" => "openshell_provider_profile",
+        "web_search" => "openshell_web_search",
         "sandbox" => "openshell_sandbox",
         _ => "",
+    }
+}
+
+/// The type of the `ref` every OpenShell provider registration exports,
+/// whatever resource registers it; sandboxes' `providers` take these refs.
+pub const PROVIDER_TYPE: &str = "openshell_provider";
+
+/// The type of the `ref` an object kind exports.
+pub fn ref_type(kind: &str) -> &'static str {
+    match kind {
+        "provider" | "web_search" => PROVIDER_TYPE,
+        kind => type_name(kind),
+    }
+}
+
+/// The OpenShell registration name a provider target or row registers.
+pub fn registration_name(
+    kind: &str,
+    values: &std::collections::BTreeMap<String, String>,
+) -> Option<String> {
+    let value = |field: &str| values.get(field).map(String::as_str).unwrap_or_default();
+    match kind {
+        "provider" => Some(value("name").to_owned()),
+        "web_search" => {
+            let provider = crate::search::SearchProvider::from_name(value("provider_type"))?;
+            Some(
+                crate::search::web_search_names(provider, value("credential_env"), value("name")).1,
+            )
+        }
+        _ => None,
     }
 }
 

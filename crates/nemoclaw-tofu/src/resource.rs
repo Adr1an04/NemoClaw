@@ -200,9 +200,12 @@ impl ResourceAdapter {
             }
         }
     }
+    /// The backend row for `state`. Derived attributes stay out: backends
+    /// never observe them, and they are recomputed from every observation.
     fn row(&self, state: &State, creating: bool) -> Result<Row, ObservationError> {
         state
             .iter()
+            .filter(|(k, _)| !self.definition.derived.iter().any(|(name, _)| name == k))
             .map(|(k, v)| match v {
                 Value::Value(v) => Ok((k.clone(), v.clone())),
                 Value::Unknown | Value::Null if self.definition.is_computed(k) => {

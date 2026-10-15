@@ -78,48 +78,6 @@
         "owner": "b126fc24-2c7e-4431-9726-29d2abc8597c",
         "provider_type": "",
         "workspace": "${openshell_workspace.deployment.ref}"
-      },
-      "web_search_tavily_54ddc3957cbfbf3583497dae": {
-        "binaries": [
-          "/usr/local/bin/python3.99"
-        ],
-        "depends_on": [
-          "data.openshell_gateway.apply"
-        ],
-        "gateway": "${data.openshell_gateway.current.ref}",
-        "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "lifecycle": {
-          "precondition": [
-            {
-              "condition": "${data.openshell_gateway.current.compatible}",
-              "error_message": "${format(\"Gateway is incompatible with this configuration: %s. Retain state, correct the gateway or the configuration, and reapply.\", data.openshell_gateway.current.incompatibility)}"
-            }
-          ]
-        },
-        "name": "nemoclaw-tavily-54ddc3957cbfbf3583497dae",
-        "owner": "b126fc24-2c7e-4431-9726-29d2abc8597c",
-        "workspace": "${openshell_workspace.deployment.ref}"
-      },
-      "web_search_tavily_71458798e8e4200c96ca9bf4": {
-        "binaries": [
-          "/usr/local/bin/python3.99"
-        ],
-        "depends_on": [
-          "data.openshell_gateway.apply"
-        ],
-        "gateway": "${data.openshell_gateway.current.ref}",
-        "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "lifecycle": {
-          "precondition": [
-            {
-              "condition": "${data.openshell_gateway.current.compatible}",
-              "error_message": "${format(\"Gateway is incompatible with this configuration: %s. Retain state, correct the gateway or the configuration, and reapply.\", data.openshell_gateway.current.incompatibility)}"
-            }
-          ]
-        },
-        "name": "nemoclaw-tavily-71458798e8e4200c96ca9bf4",
-        "owner": "b126fc24-2c7e-4431-9726-29d2abc8597c",
-        "workspace": "${openshell_workspace.deployment.ref}"
       }
     },
     "openshell_provider_registration": {
@@ -166,59 +124,13 @@
         "owner": "b126fc24-2c7e-4431-9726-29d2abc8597c",
         "provider_type": "",
         "workspace": "${openshell_workspace.deployment.ref}"
-      },
-      "web_search_tavily_64af2c4d05f99c5a04c99cd4": {
-        "credential_env": "TAVILY_API_KEY",
-        "depends_on": [
-          "openshell_provider_profile.web_search_tavily_71458798e8e4200c96ca9bf4",
-          "data.openshell_gateway.apply"
-        ],
-        "endpoint": "https://api.tavily.com",
-        "gateway": "${data.openshell_gateway.current.ref}",
-        "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "lifecycle": {
-          "precondition": [
-            {
-              "condition": "${data.openshell_gateway.current.compatible}",
-              "error_message": "${format(\"Gateway is incompatible with this configuration: %s. Retain state, correct the gateway or the configuration, and reapply.\", data.openshell_gateway.current.incompatibility)}"
-            }
-          ]
-        },
-        "name": "tavily-search-64af2c4d05f99c5a04c99cd4",
-        "owner": "b126fc24-2c7e-4431-9726-29d2abc8597c",
-        "profile": "${openshell_provider_profile.web_search_tavily_71458798e8e4200c96ca9bf4.ref}",
-        "provider_type": "tavily",
-        "workspace": "${openshell_workspace.deployment.ref}"
-      },
-      "web_search_tavily_b834e6dcc9c43c0d32bd2c2f": {
-        "credential_env": "TAVILY_API_KEY",
-        "depends_on": [
-          "openshell_provider_profile.web_search_tavily_54ddc3957cbfbf3583497dae",
-          "data.openshell_gateway.apply"
-        ],
-        "endpoint": "https://api.tavily.com",
-        "gateway": "${data.openshell_gateway.current.ref}",
-        "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "lifecycle": {
-          "precondition": [
-            {
-              "condition": "${data.openshell_gateway.current.compatible}",
-              "error_message": "${format(\"Gateway is incompatible with this configuration: %s. Retain state, correct the gateway or the configuration, and reapply.\", data.openshell_gateway.current.incompatibility)}"
-            }
-          ]
-        },
-        "name": "tavily-search-b834e6dcc9c43c0d32bd2c2f",
-        "owner": "b126fc24-2c7e-4431-9726-29d2abc8597c",
-        "profile": "${openshell_provider_profile.web_search_tavily_54ddc3957cbfbf3583497dae.ref}",
-        "provider_type": "tavily",
-        "workspace": "${openshell_workspace.deployment.ref}"
       }
     },
     "openshell_sandbox": {
       "hermes": {
         "depends_on": [
           "openshell_provider_registration.inference_local-4dcf1b725a48b148ce57287f",
-          "openshell_provider_registration.web_search_tavily_64af2c4d05f99c5a04c99cd4",
+          "openshell_web_search.tavily_71458798e8e4200c96ca9bf4_tavily_api_key",
           "data.openshell_gateway.apply"
         ],
         "gateway": "${data.openshell_gateway.current.ref}",
@@ -254,7 +166,7 @@
               ],
               "name": "nemoclaw-inference-local-4dcf1b725a48b148ce57287f"
             },
-            "nemoclaw-tavily-71458798e8e4200c96ca9bf4": {
+            "nemoclaw-tavily-30809e6761b7aea95293b61b": {
               "binaries": [],
               "endpoints": [
                 {
@@ -278,20 +190,20 @@
                   ]
                 }
               ],
-              "name": "nemoclaw-tavily-71458798e8e4200c96ca9bf4"
+              "name": "nemoclaw-tavily-30809e6761b7aea95293b61b"
             }
           }
         },
         "providers": [
           "${openshell_provider_registration.inference_local-4dcf1b725a48b148ce57287f.ref}",
-          "${openshell_provider_registration.web_search_tavily_64af2c4d05f99c5a04c99cd4.ref}"
+          "${openshell_web_search.tavily_71458798e8e4200c96ca9bf4_tavily_api_key.ref}"
         ],
         "workspace": "${openshell_workspace.deployment.ref}"
       },
       "researcher": {
         "depends_on": [
           "openshell_provider_registration.inference_local-d6ca74ad95e4f1d5f302f50e",
-          "openshell_provider_registration.web_search_tavily_b834e6dcc9c43c0d32bd2c2f",
+          "openshell_web_search.tavily_54ddc3957cbfbf3583497dae_tavily_api_key",
           "data.openshell_gateway.apply"
         ],
         "gateway": "${data.openshell_gateway.current.ref}",
@@ -327,7 +239,7 @@
               ],
               "name": "nemoclaw-inference-local-d6ca74ad95e4f1d5f302f50e"
             },
-            "nemoclaw-tavily-54ddc3957cbfbf3583497dae": {
+            "nemoclaw-tavily-99b08272cb899ab383a5f890": {
               "binaries": [],
               "endpoints": [
                 {
@@ -351,14 +263,60 @@
                   ]
                 }
               ],
-              "name": "nemoclaw-tavily-54ddc3957cbfbf3583497dae"
+              "name": "nemoclaw-tavily-99b08272cb899ab383a5f890"
             }
           }
         },
         "providers": [
           "${openshell_provider_registration.inference_local-d6ca74ad95e4f1d5f302f50e.ref}",
-          "${openshell_provider_registration.web_search_tavily_b834e6dcc9c43c0d32bd2c2f.ref}"
+          "${openshell_web_search.tavily_54ddc3957cbfbf3583497dae_tavily_api_key.ref}"
         ],
+        "workspace": "${openshell_workspace.deployment.ref}"
+      }
+    },
+    "openshell_web_search": {
+      "tavily_54ddc3957cbfbf3583497dae_tavily_api_key": {
+        "binaries": [
+          "/usr/local/bin/python3.99"
+        ],
+        "credential_env": "TAVILY_API_KEY",
+        "depends_on": [
+          "data.openshell_gateway.apply"
+        ],
+        "gateway": "${data.openshell_gateway.current.ref}",
+        "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "lifecycle": {
+          "precondition": [
+            {
+              "condition": "${data.openshell_gateway.current.compatible}",
+              "error_message": "${format(\"Gateway is incompatible with this configuration: %s. Retain state, correct the gateway or the configuration, and reapply.\", data.openshell_gateway.current.incompatibility)}"
+            }
+          ]
+        },
+        "name": "54ddc3957cbfbf3583497dae",
+        "provider_type": "tavily",
+        "workspace": "${openshell_workspace.deployment.ref}"
+      },
+      "tavily_71458798e8e4200c96ca9bf4_tavily_api_key": {
+        "binaries": [
+          "/usr/local/bin/python3.99"
+        ],
+        "credential_env": "TAVILY_API_KEY",
+        "depends_on": [
+          "data.openshell_gateway.apply"
+        ],
+        "gateway": "${data.openshell_gateway.current.ref}",
+        "generation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "lifecycle": {
+          "precondition": [
+            {
+              "condition": "${data.openshell_gateway.current.compatible}",
+              "error_message": "${format(\"Gateway is incompatible with this configuration: %s. Retain state, correct the gateway or the configuration, and reapply.\", data.openshell_gateway.current.incompatibility)}"
+            }
+          ]
+        },
+        "name": "71458798e8e4200c96ca9bf4",
+        "provider_type": "tavily",
         "workspace": "${openshell_workspace.deployment.ref}"
       }
     },

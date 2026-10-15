@@ -30,9 +30,12 @@ pub fn policy_input(
             ));
         }
         let mut rule = crate::config::search_policy(search.provider);
-        rule.name = search
-            .provider
-            .image_profile(&document.image_scope(sandbox)?);
+        rule.name = nemoclaw_openshell::search::web_search_names(
+            search.provider,
+            &search.credential.env,
+            &document.image_scope(sandbox)?,
+        )
+        .0;
         rule.binaries.clear();
         managed.insert(rule.name.clone(), rule);
     }

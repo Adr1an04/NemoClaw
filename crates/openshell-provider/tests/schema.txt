@@ -105,7 +105,8 @@ resource openshell_provider_registration (version 2)
   owner: string, optional, computed
   profile: object({ name = string, type = string }), optional
   provider_type: string, optional, computed
-  ref: object({ generation = string, id = string, name = string, owner = string, type = string, workspace = string }), computed
+  ref: object({ generation = string, id = string, name = string, owner = string, registration = string, type = string, workspace = string }), computed
+  registration: string, computed
   workspace: object({ name = string, type = string }), required
 
 resource openshell_sandbox (version 2)
@@ -116,7 +117,7 @@ resource openshell_sandbox (version 2)
   launch_json: string, required
   name: string, required
   owner: string, optional, computed
-  providers: list(object({ name = string, type = string })), optional
+  providers: list(object({ registration = string, type = string })), optional
   ref: object({ generation = string, id = string, name = string, owner = string, type = string, workspace = string }), computed
   workspace: object({ name = string, type = string }), required
   block policy: optional
@@ -314,6 +315,18 @@ resource openshell_sandbox (version 2)
                 > Nonempty list of nonempty glob strings.
               value: string, optional
                 > The value itself, instead of the other attributes.
+
+resource openshell_web_search (version 2)
+  binaries: list(string), optional
+  credential_env: string, optional, computed
+  gateway: object({ credential_env = string, endpoint = string, tls_ca_env = string, tls_certificate_env = string, tls_key_env = string, type = string }), required
+  generation: string, optional, computed
+  id: string, computed
+  name: string, required
+  provider_type: string, required
+  ref: object({ generation = string, id = string, name = string, owner = string, registration = string, type = string, workspace = string }), computed
+  registration: string, computed
+  workspace: object({ name = string, owner = string, type = string }), required
 
 resource openshell_workspace (version 2)
   gateway: object({ credential_env = string, endpoint = string, tls_ca_env = string, tls_certificate_env = string, tls_key_env = string, type = string }), required
