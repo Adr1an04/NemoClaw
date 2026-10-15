@@ -629,7 +629,23 @@ Each validates the runtime contract and container identity, reads the service's 
 It does not repeat model-file verification, collect hardware inventory, or request model responses.
 Startup phases may be polled; stopped services, failed observations, and malformed status fail the read.
 
-Each readiness data source requires the container's `engine`, `name`, and `container_id`, and its `contract`: the `spec` of the runtime contract data source the container runs with, `vllm_runtime` for `vllm_readiness`, `ollama_runtime` for `ollama_readiness`, and `ollama_proxy_runtime` for `ollama_proxy_readiness`.
+Each readiness data source requires its `contract`, the `spec` of the runtime contract data source the server runs with: `vllm_runtime` for `vllm_readiness`, `ollama_runtime` for `ollama_readiness`, and `ollama_proxy_runtime` for `ollama_proxy_readiness`.
+It reads readiness in one of two modes:
+
+- **Container mode:** `engine`, `name`, and `container_id` name a Docker container; the read follows the container's status as described above.
+- **Endpoint mode:** `endpoint` is the server's OpenAI-compatible base URL, ending in `/v1`, that the provider can reach. The read polls `<endpoint>/models`, without following redirects, until the response lists the contract's served model; it needs no engine and works for a server on any platform. It serves unauthenticated contracts only and reports neither startup phase nor failure reason. Optional `sandbox_endpoint` is the base URL gateways and sandboxes use, defaulting to `endpoint`. A successful read exports `ref = { type = "inference_server", endpoint, model }`, with `sandbox_endpoint` as `endpoint`; container mode exports no `ref`. `ollama_proxy_readiness` supports container mode only.
+
+Setting both modes' inputs fails validation, as does endpoint mode with an authenticated contract.
+Until inference registrations take the `ref`, pass its endpoint: `endpoint = data.vllm_readiness.NAME.ref.endpoint`.
+
+```hcl
+data "vllm_readiness" "qwen" {
+  contract         = data.vllm_runtime.qwen.spec
+  endpoint         = "http://127.0.0.1:18898/v1"
+  sandbox_endpoint = "http://host.openshell.internal:18898/v1"
+  read_trigger     = docker_container.qwen.id != ""
+}
+```
 A contract for another runtime fails validation, naming the provider that reads it.
 Its optional `wait_timeout_seconds` accepts zero to 32400 seconds; omission means 32400 seconds, and zero requests one bounded observation.
 Successful reads return `ready: true`; unsuccessful reads report an error.

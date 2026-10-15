@@ -24,12 +24,15 @@ data vllm_capacity (version 0)
   required_bytes: number, computed
 
 data vllm_readiness (version 0)
-  container_id: string, required
+  container_id: string, optional
   contract: string, required
-  engine: string, required
-  name: string, required
+  endpoint: string, optional
+  engine: string, optional
+  name: string, optional
   read_trigger: bool, optional
   ready: bool, computed
+  ref: object({ endpoint = string, model = string, type = string }), computed
+  sandbox_endpoint: string, optional
   wait_timeout_seconds: number, optional
 
 data vllm_runtime (version 0)

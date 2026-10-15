@@ -30,12 +30,15 @@ data ollama_model (version 0)
   upstream: string, required
 
 data ollama_proxy_readiness (version 0)
-  container_id: string, required
+  container_id: string, optional
   contract: string, required
-  engine: string, required
-  name: string, required
+  endpoint: string, optional
+  engine: string, optional
+  name: string, optional
   read_trigger: bool, optional
   ready: bool, computed
+  ref: object({ endpoint = string, model = string, type = string }), computed
+  sandbox_endpoint: string, optional
   wait_timeout_seconds: number, optional
 
 data ollama_proxy_runtime (version 0)
@@ -52,12 +55,15 @@ data ollama_proxy_runtime (version 0)
     > Loopback HTTP Ollama endpoint, ending in /v1.
 
 data ollama_readiness (version 0)
-  container_id: string, required
+  container_id: string, optional
   contract: string, required
-  engine: string, required
-  name: string, required
+  endpoint: string, optional
+  engine: string, optional
+  name: string, optional
   read_trigger: bool, optional
   ready: bool, computed
+  ref: object({ endpoint = string, model = string, type = string }), computed
+  sandbox_endpoint: string, optional
   wait_timeout_seconds: number, optional
 
 data ollama_runtime (version 0)
