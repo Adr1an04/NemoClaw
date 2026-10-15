@@ -112,9 +112,9 @@ fn targets(
             runtime_service,
         )))
         .map_err(|_| Error::State("cannot serialize service runtime configuration"))?,
-        entrypoint: vec!["/usr/local/bin/nemoclaw-runtime".into()],
+        entrypoint: vec![crate::managed::RUNTIME_ENTRYPOINT.into()],
         command: Vec::new(),
-        mount_target: "/data".into(),
+        mount_target: crate::managed::RUNTIME_DATA_PATH.into(),
         bind_address: placed.bind_address,
         port: service.serving.port as u16,
         shared_memory_bytes: resources.shared_memory_bytes,

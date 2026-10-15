@@ -524,8 +524,30 @@ data "vllm_runtime" "qwen" {
 }
 ```
 
-A vLLM `docker_container` passes `spec` as `NEMOCLAW_RUNTIME_SPEC` and declares the rest of its configuration directly.
-Generated graphs declare:
+`launch` and `requirements` describe the server for any platform, so a Docker container, a Kubernetes pod, or any other placement can run it without the SDK:
+
+- `launch` has `entrypoint`, `command`, `environment` (only `NEMOCLAW_RUNTIME_SPEC`, holding `spec`), the `port` the server listens on, and the `data_path` for its model cache.
+- `requirements` has `gpu`, a recommended minimum `shared_memory_bytes` (8 GiB), and `ulimits` by name, where `-1` is unlimited: `memlock` and `stack`. Platforms that cannot set process limits leave them to the node.
+- Memory and CPU limits, IPC, publication, and credentials are the placement's choice.
+
+```hcl
+resource "docker_container" "qwen" {
+  name       = "qwen"
+  image      = var.vllm_image # pinned by digest
+  entrypoint = data.vllm_runtime.qwen.launch.entrypoint
+  command    = data.vllm_runtime.qwen.launch.command
+  env        = [for name, value in data.vllm_runtime.qwen.launch.environment : "${name}=${value}"]
+  shm_size   = data.vllm_runtime.qwen.requirements.shared_memory_bytes / 1048576
+  gpus       = "all"
+  ports {
+    internal = data.vllm_runtime.qwen.launch.port
+    external = data.vllm_runtime.qwen.launch.port
+    ip       = "127.0.0.1"
+  }
+}
+```
+
+Generated graphs place managed vLLM with Docker and declare:
 
 - `entrypoint = ["/usr/local/bin/nemoclaw-runtime"]` and `env = ["NEMOCLAW_RUNTIME_SPEC=${data.vllm_runtime.NAME.spec}"]`.
 - The model cache volume at `/data` and, with bearer authentication, the `vllm_credential_storage` credential volume at `/credentials`.
@@ -543,7 +565,7 @@ See [container limits and update policy](inference.md#set-container-limits-and-u
 
 ## Ollama Runtime Contracts
 
-`ollama_runtime` computes the managed Ollama runtime's `NEMOCLAW_RUNTIME_SPEC` the same way.
+`ollama_runtime` computes the managed Ollama runtime's `NEMOCLAW_RUNTIME_SPEC` the same way, with the same `launch` and `requirements` outputs.
 Its blocks follow the Ollama runtime contract with snake_case names: `hardware`, `model` with `name` and `digest`, `serving`, and `memory`.
 
 `ollama_proxy_runtime` computes the external Ollama proxy's `NEMOCLAW_OLLAMA_PROXY` value from `bind_address`, `upstream`, `model`, and `digest`.
