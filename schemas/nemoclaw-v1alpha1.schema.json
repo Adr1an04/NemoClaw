@@ -994,7 +994,7 @@
       "properties": {
         "api": {
           "$ref": "#/$defs/InferenceApi",
-          "description": "Request API. Omission selects anthropic-messages for Anthropic providers and openai-completions for OpenAI providers; explicit values are preserved for Fabric validation."
+          "description": "Request API. Omission selects anthropic-messages for Anthropic providers and openai-completions for OpenAI providers. NemoClaw uses it to read the endpoint's model catalog; agents use the protocol their adapter selects for the provider."
         },
         "credential": {
           "$ref": "#/$defs/Credential",
@@ -1769,6 +1769,11 @@
       "additionalProperties": false,
       "description": "Model settings for one named inference choice.",
       "properties": {
+        "extensions": {
+          "additionalProperties": true,
+          "description": "Model fields the selected adapter declares as extensions, such as Pi's context_window; Fabric validates them.",
+          "type": "object"
+        },
         "maxTokens": {
           "description": "Maximum output tokens requested from the native adapter.",
           "format": "uint32",

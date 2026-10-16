@@ -294,7 +294,6 @@ fixtures! {
     multiple_models => "multiple-models",
     multiple_providers => "multiple-providers",
     multiple_sandboxes => "multiple-sandboxes",
-    openclaw_dashboard => "openclaw-dashboard",
-    openclaw_web_search => "openclaw-web-search",
-    tavily_web_search => "tavily-web-search",
+    openclaw => "openclaw",
+    web_search => "web-search",
 }

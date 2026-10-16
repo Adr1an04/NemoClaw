@@ -187,19 +187,14 @@ class ProtocolLifecycle(unittest.IsolatedAsyncioTestCase):
     def native(self, **kwargs):
         return SimpleNamespace(to_mapping=lambda: {"status": "succeeded", "output": "ok"})
 
-    async def test_adapters_receive_the_input_object_unchanged(self):
+    async def test_input_reaches_fabric_unchanged(self):
         await self.call("configure")
-        self.runtime.invoke.side_effect = self.native
-        response = await self.call("invoke", input={"text": "Say hello."})
-        self.assertEqual(response["status"], "succeeded", response)
-        self.runtime.invoke.assert_awaited_once_with(input={"text": "Say hello."})
-
-    async def test_invoke_input_stays_an_object(self):
-        await self.call("configure")
-        response = await self.call("invoke", input="Say hello.")
-        self.assertEqual(response["status"], "failed")
-        self.assertEqual(response["error"]["code"], "invalid_request")
-        self.runtime.invoke.assert_not_awaited()
+        for value in ("Say hello.", {"text": "Say hello."}, ["a", 1]):
+            self.runtime.invoke.reset_mock()
+            self.runtime.invoke.side_effect = self.native
+            response = await self.call("invoke", input=value)
+            self.assertEqual(response["status"], "succeeded", response)
+            self.runtime.invoke.assert_awaited_once_with(input=value)
 
     async def test_operational_and_streaming_never_invoke(self):
         await self.call("configure")

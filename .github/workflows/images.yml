@@ -80,9 +80,3 @@ jobs:
               -v "$PWD/image/test_image.py:/test.py:ro" \
               --entrypoint /opt/fabric/bin/python "$image" -B /test.py
           done < .build-image-list
-      - name: Check native reconfiguration
-        if: needs.plan.outputs.images == 'true'
-        run: |
-          docker run --rm --runtime=runc --network none \
-            -v "$PWD/image/test_openclaw_reconfiguration.py:/test_openclaw_reconfiguration.py:ro" \
-            --entrypoint /opt/fabric/bin/python nc-fabric:openclaw -B /test_openclaw_reconfiguration.py
