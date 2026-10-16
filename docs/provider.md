@@ -118,6 +118,10 @@ Other inputs are typed too:
   It is passed through unchanged, so OpenShell's defaults apply; see OpenShell's [driver configuration and mounts](https://github.com/NVIDIA/OpenShell/blob/5a7728c304b5528e954e9ae900cf21f84e1a12b1/docs/how-it-works/sandboxes/runtimes.mdx).
   The gateway accepts it only when its driver allows driver configuration, which OpenShell disables by default, NemoClaw-installed gateways included.
   It is part of the sandbox's immutable specification: changing it, or a different configuration observed on the gateway, would replace the sandbox, which apply refuses, as for the image; see [change paths](usage.md#choose-the-change-path).
+- `openshell_sandbox`'s optional `service` blocks are OpenShell's sandbox service exposures: `name`, `target_port`, and optional `authorization_mode` (`STRIP` or `BEARER_PASSTHROUGH`).
+  They are passed through unchanged in the creation request, so OpenShell's defaults apply: an omitted mode is `STRIP`, and an empty name is the unnamed endpoint.
+  Like `driver_config`, they are part of the sandbox's creation: changing them, or a different endpoint observed on the gateway, would replace the sandbox, which apply refuses.
+- The computed `service_urls` maps each service name to the URL the gateway reports for it, such as `openshell_sandbox.researcher.service_urls["research"]`. A service the gateway reports without a URL has no entry.
 - `owner` and `generation` are optional; when omitted, the provider generates them during apply and keeps them in state, with the lost-reply limit described for [credential storage](#vllm-and-ollama-types).
 
 ```hcl
@@ -128,6 +132,10 @@ resource "openshell_sandbox" "assistant" {
   image        = var.image
   launch_json  = data.fabric_harnesses.assistant.launch_json
   providers    = [openshell_inference.local.ref]
+  service {
+    name        = "research"
+    target_port = 8080
+  }
   policy {
     explicit {
       version = 1
