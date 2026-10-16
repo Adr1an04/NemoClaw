@@ -124,8 +124,8 @@ The bundled snapshot is provisional offline metadata.
 Harness identifiers are opaque strings.
 Authoring derives questions, choices, defaults, and conditional requirements from the selected settings schema.
 The SDK projects deployment references into one public Fabric configuration; both planning and execution consume that configuration.
-The selected-image descriptor snapshot is validated by Fabric's planner, without starting adapters or reading their native code.
-An unavailable or incompatible metadata version leaves native validation unknown.
+Before provisioning, NemoClaw checks only that the selected image provides the adapter at the expected Fabric revision; an unavailable or incompatible metadata version leaves compatibility unknown.
+Fabric validates the configuration inside the sandbox when the agent is configured.
 Generic field validation helps the interview; Fabric's planner owns validation of the complete native configuration.
 
 The Fabric revision remains pinned until the [descriptor catalog change](https://github.com/NVIDIA/NeMo-Fabric/pull/318) and its adapter follow-ups are available together.

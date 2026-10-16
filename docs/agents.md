@@ -20,9 +20,8 @@ For public Fabric configuration such as MCP, telemetry, or a workflow, use `harn
 Deployment-owned fields, including metadata, adapter identity, and resolved model connections, cannot be overridden through that object.
 See [the SDK configuration projection](../crates/nemoclaw-sdk/src/fabric_config.rs) for the deployment boundary.
 
-Plan invokes Fabric's planner against the selected image's canonical descriptor snapshot.
-A missing descriptor contract or mismatched Fabric revision leaves compatibility unknown; a schema rejection is unsupported.
-Runtime startup validates the same public configuration through the installed Fabric API.
+Plan checks that the selected image provides the harness at NemoClaw's Fabric revision; a mismatched revision leaves compatibility unknown.
+Fabric validates the configuration through its installed API when the agent is configured, so a configuration the harness rejects fails during apply ([#13319](https://github.com/NVIDIA/NemoClaw/issues/13319)).
 Neither check establishes successful model inference.
 
 ## Choose Native Access

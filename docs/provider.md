@@ -278,7 +278,7 @@ resource "fabric_agent" "travel" {
 ```
 
 Planning rejects a configuration Fabric cannot parse, naming the field but not its value.
-It also rejects one the harness does not accept, using the catalog records in the harness ref: Pi, for example, replaces system instructions and cannot append to them.
+Whether the harness accepts a configuration is Fabric's to decide, inside the sandbox when the agent is configured: Pi, for example, replaces system instructions and cannot append to them, so asking it to append fails during apply ([#13319](https://github.com/NVIDIA/NemoClaw/issues/13319)).
 Once the sandbox is known, planning refuses a `name` or harness other than the agent and harness the sandbox launches.
 Changing the sandbox, harness, or `name` replaces the agent; any other change reconfigures it through the sandbox's Fabric host without replacing the sandbox.
 Removing the resource stops the agent, as removing an attachment does: Fabric stops its runtime through the host's `prepare` operation and the host forgets the configuration, while the sandbox stays.
@@ -448,12 +448,9 @@ Optional `filesystem_read` lists the paths the sandbox policy grants for reading
 A configuration without `harness.adapter_id` is rejected.
 Optional `architecture` and `operating_system` supply the execution engine's platform.
 The computed `compatibility_status` is `supported`, `unsupported`, or `unknown`, with details in `observation_json.compatibility`.
-The SDK checks image identity, source revision and platform, then calls Fabric's pure planner with the selected image's descriptors.
-Fabric owns settings, model, extension and workflow validation.
-Missing native capability contracts and mismatched Fabric revisions remain unknown; explicit schema violations are unsupported.
-The `fabric_plan` check retains a bounded canonical field path and a fixed explanation for classified planner failures.
-Raw schema messages and rejected values are omitted; unsafe or overlong field identifiers fall back to `configuration`.
-For a rejected model token limit, the reason also names `overrides.maxTokens` and up to 16 model routes carrying that setting, including Fabric's generated `default` role.
+The SDK checks image identity, source revision and platform, and that the image provides the selected adapter (the `fabric_adapter` check).
+A mismatched Fabric revision leaves compatibility unknown; an image without the adapter is unsupported.
+Fabric owns settings, model, extension and workflow validation, which it performs inside the sandbox when the agent is configured.
 Deployment postconditions name the sandbox and adapter and preserve unsupported check reasons in text and JSON errors.
 Onboarding uses the same assessment; unknown error variants retain a generic rejection.
 Omitting `config_json` preserves metadata-only discovery.
