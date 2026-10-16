@@ -42,7 +42,8 @@ The generated graphs manage these objects and observations:
 | OpenShell provider | Kubernetes namespace and encryption key (`openshell_kubernetes_storage`), development issuer (`openshell_kubernetes_auth`), and gateway readiness (`openshell_kubernetes_gateway`) |
 | Host provider data source | Engine facts and advertised hardware (`host_engine`) |
 | Host provider data source | Managed vLLM and Ollama image platform and labels (`host_image`) |
-| Docker provider | Docker gateway, inference, and proxy containers; model-cache volumes, service-owned networks and acquired images |
+| Host provider data source | Application container health (`host_container_health`) |
+| Docker provider | Docker gateway, inference, proxy, and application containers; model-cache and application volumes, service-owned networks and acquired images |
 | Docker provider data source | Local images selected with `imagePullPolicy: Never` |
 | Helm provider | The managed Kubernetes gateway's OpenShell chart release (`helm_release.gateway`) |
 
@@ -351,6 +352,7 @@ The `host` provider observes container engines and changes nothing; it has no se
 |---|---|
 | `host_engine` | [Engine version, platform, CPUs, memory](#engine-and-fabric-discovery), and [advertised hardware](#target-hardware) |
 | `host_image` | [An image's platform and labels](#runtime-image-compatibility) |
+| `host_container_health` | [Owned container readiness](#application-container-health): Docker HEALTHCHECK, HTTP, or managed-runtime status |
 
 ### Docker and Helm Types
 
@@ -678,6 +680,22 @@ The SDK emits a read for the currently selected image and another dependent on a
 An absent image may therefore be pulled before a compatibility failure, but storage, network, and container creation remain blocked.
 SDK plan reports preserve unresolved runtime-image checks in `deferred`, separate from supplemental catalog and service-readiness advisories.
 Teardown removes both image observations and their dependency gates.
+
+## Application Container Health
+
+`host_container_health` requires an `engine`, a container `name`, and a `container_id`.
+Optional `labels` maps each label the container must carry to its value; generated graphs require the deployment owner, generation, and compiled launch digest.
+The source verifies that the selected container is running and matches its identity and labels; it never runs a command in it.
+By default it requires Docker HEALTHCHECK to report `healthy`.
+Optional `http_url` selects an HTTP GET that must return 200, without credentials in the URL or redirects.
+Optional `runtime_status` instead selects a managed-runtime status file: `phase`, `updated`, `detail`, and `pid`, with a ready report no older than the container's start time.
+These modes are mutually exclusive; neither interprets application configuration or invokes a model.
+A successful read sets `healthy`.
+It waits for startup within `wait_timeout_seconds` (capped at 3600, default 0); zero performs one bounded observation.
+Missing or stopped containers, mismatched labels, malformed or stopped runtime reports, rejected HTTP reads, and unhealthy Docker reports fail the read.
+A stale runtime report or loading phase is not readiness; it can be polled within the deadline.
+Failed engine observations are not absence.
+Generated graphs set `read_trigger` so every apply, including an unchanged apply, observes current health before dependent services start.
 
 ## Runtime Capacity and Readiness
 
