@@ -49,7 +49,7 @@ Native settings can select other locations; inspect the selected harness configu
 
 NemoClaw sets the workspace and artifact locations in the agent's Fabric configuration; the [pinned Fabric adapters](https://github.com/NVIDIA/NeMo-Fabric/tree/5574117feb4be948c1b03f4c36a2fe9a11af910d/adapters/python) define the rest.
 The table covers the harness targets in the [image build matrix](../docker-bake.hcl); a descriptor in the image catalog alone does not establish that a harness is installed or qualified on a platform.
-Agent state can survive a process restart while its files remain; deleting the sandbox deletes its files.
+Agent state can survive a process restart while its files remain; replacing or deleting the sandbox, as any agent configuration change does, deletes its files.
 Each declared agent runs in its own OpenShell sandbox; workspace directories do not further isolate processes within that sandbox.
 
 ### Conversation and Credential Boundaries
