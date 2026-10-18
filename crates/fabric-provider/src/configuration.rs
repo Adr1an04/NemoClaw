@@ -259,17 +259,23 @@ mod tests {
     }
 
     #[test]
-    fn start_failure_keeps_the_code_and_named_sandbox_without_native_details() {
-        let error = super::configuration_failure("start", "start_failed", "none");
-        let message = nemoclaw_tofu::observation_message(error, Some("coder"));
-        for expected in [
-            "sandbox/coder",
-            "start_failed",
-            "start",
-            "resources retained",
+    fn known_configuration_failures_keep_the_code_and_named_sandbox_without_native_details() {
+        for (stage, code, sandbox) in [
+            ("start", "start_failed", "coder"),
+            ("validation", "validation_failed", "assistant"),
         ] {
-            assert!(message.contains(expected), "{message}");
+            let error = super::configuration_failure(stage, code, "none");
+            let message = nemoclaw_tofu::observation_message(error, Some(sandbox));
+            assert!(message.contains(&format!("sandbox/{sandbox}")), "{message}");
+            for expected in [
+                code,
+                stage,
+                "agent runtime is unavailable",
+                "resources retained",
+            ] {
+                assert!(message.contains(expected), "{message}");
+            }
+            assert!(!message.contains("PRIVATE_SENTINEL"));
         }
-        assert!(!message.contains("PRIVATE_SENTINEL"));
     }
 }
