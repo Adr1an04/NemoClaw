@@ -201,7 +201,6 @@ impl Document {
             if gateway.runtime.provider == ComputeDriver::Docker {
                 default_string(&mut gateway.engine, constraints::GATEWAY_ENGINE);
             }
-            default_string(&mut gateway.image, DEFAULT_GATEWAY_IMAGE);
             default_string(
                 &mut gateway.network_cidr,
                 &format!(
@@ -257,9 +256,10 @@ fn network_address(
     Ok(std::net::Ipv4Addr::from(address).to_string())
 }
 impl ManagedGateway {
+    /// These settings without the image acquisition policy, a mutable provider
+    /// attribute rather than container identity.
     pub(crate) fn runtime_settings(&self) -> Self {
         let mut settings = self.clone();
-        // Acquisition policy is a mutable provider attribute, not container identity.
         settings.image_pull_policy = None;
         settings
     }

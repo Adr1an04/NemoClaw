@@ -92,6 +92,7 @@ fn runtime_targets_with_plans(
         owner: document.metadata.uid.clone(),
         generation: generation(generations, GATEWAY_KIND)?.into(),
         gateway: settings.runtime_settings(),
+        image: crate::config::DEFAULT_GATEWAY_IMAGE.into(),
         process: None,
     };
     // The listen port changes Docker compute, not initialized data or credentials.
