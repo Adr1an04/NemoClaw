@@ -152,6 +152,9 @@ pub(crate) fn runtime_graph(
                 if name == crate::kubernetes::ENVIRONMENT_FIELD {
                     attributes["environment"] = serde_json::from_str(value)
                         .map_err(|_| Error::State("invalid Kubernetes environment"))?;
+                } else if name == crate::kubernetes::OIDC_FIELD {
+                    // The provider takes the settings as JSON text.
+                    attributes["oidc"] = json!(value.replace("${", "$${").replace("%{", "%%{"));
                 } else {
                     attributes[name] = json!(value.replace("${", "$${").replace("%{", "%%{"));
                 }
