@@ -232,7 +232,7 @@ Reordering declarations is not an update.
 Each sandbox receives only its selected inference provider policies, while shared definitions reuse one provider registration.
 Sandbox-local definitions are visible only to their enclosing sandbox.
 Sandboxes can select distinct Brave credential references; shared references reuse one registration.
-Removing or replacing a sandbox deletes its files and conversation history, and the plan shows it; keep data that must survive on a [mounted volume](agents.md#skills-on-a-mounted-volume).
+Removing or replacing a sandbox deletes its writable layer and in-memory conversation, and the plan shows it; keep files that must survive on [mounted agent-data volumes](state.md#keep-agent-files-on-mounted-volumes).
 
 ### Choose the Change Path
 
@@ -347,7 +347,8 @@ The [reported malformed-request failure](agents.md#run-one-headless-openclaw-req
 The CLI has no targeted sandbox replacement or runtime-reset command.
 Its supported replacement path is whole-deployment destroy followed by reapplying the original configuration.
 
-**Destroy deletes every bound sandbox's files and conversation history, including those of other agents in this deployment.**
+**Destroy deletes every bound sandbox's writable layer and in-memory conversation, including those of other agents in this deployment.**
+Files on caller-supplied mounted volumes remain under the platform's control; see [agent-data retention](state.md#keep-agent-files-on-mounted-volumes).
 Preserve any native data you need before choosing removal; configuration export does not back it up.
 Managed model and credential storage remain tracked; that storage does not preserve sandbox files.
 Keep the original YAML, matching bundle, credential references, and entire state directory.
@@ -412,7 +413,8 @@ After destroy succeeds, the namespace, encryption key, and persistent volumes re
 ## Destroy
 
 Destroy removes all bound sandboxes, provider registrations and profiles, the OpenShell workspace, and managed process containers.
-**Sandbox files and conversation history are deleted.** Back up native agent data separately when needed.
+**Sandbox writable layers and in-memory conversations are deleted.**
+Files on caller-supplied mounted volumes remain under the platform's control; the platform owns their backup and transfer.
 Model downloads, prepared data, the gateway database and keys, the gateway bridge, the stopped initializer, images, and local deployment state remain.
 Re-applying the same configuration reinstalls a managed gateway on its retained storage and recreates the workspace.
 Service-owned networks are removed with disposable compute.
@@ -441,7 +443,7 @@ OpenShell deletes by name without an ID/version condition, so a concurrent repla
 ### Remove Retained Resources
 
 This procedure removes what destroy retains on Docker engines when you retire a deployment.
-It does not cover a Podman, Kubernetes, or OpenShift gateway, or the workspace on an external gateway; keep the state directory for those ([#12640](https://github.com/NVIDIA/NemoClaw/issues/12640)).
+It does not cover a Podman, Kubernetes, or OpenShift gateway; keep the state directory for those ([#12640](https://github.com/NVIDIA/NemoClaw/issues/12640)).
 
 **Removal permanently deletes the managed gateway's database, workspace, and keys, plus model downloads, prepared data, and managed vLLM and Ollama proxy credentials.**
 It does not revoke upstream keys or remove images, external gateways, or engines.
