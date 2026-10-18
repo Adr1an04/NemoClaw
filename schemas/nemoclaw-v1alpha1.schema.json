@@ -935,29 +935,6 @@
       "allOf": [
         {
           "if": {
-            "properties": {
-              "endpoint": {
-                "pattern": "^http:"
-              }
-            },
-            "required": [
-              "endpoint"
-            ]
-          },
-          "then": {
-            "not": {
-              "anyOf": [
-                {
-                  "required": [
-                    "credential"
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        {
-          "if": {
             "required": [
               "api"
             ]

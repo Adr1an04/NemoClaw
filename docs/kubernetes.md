@@ -22,7 +22,7 @@ OpenShift's security policy admitting these pods is untested; [current limits](l
   - [Agent Sandbox](https://github.com/kubernetes-sigs/agent-sandbox), with its controller running in `agent-sandbox-system`; CI tests version 0.5.0.
   - Exactly one default StorageClass.
 - **Agent images:** pushed to a registry the cluster can pull from, and referenced by digest.
-- **Inference:** an endpoint reachable from inside the sandboxes.
+- **Inference:** an endpoint reachable from inside the sandboxes, such as a [model server you run in the cluster](#use-a-model-server-in-the-cluster).
   Managed model services under `spec.services` are not supported on Kubernetes ([#12641](https://github.com/NVIDIA/NemoClaw/issues/12641)).
 
 NemoClaw installs nothing cluster-wide and never selects a context for you.
@@ -176,6 +176,35 @@ To use an OpenShell gateway someone else runs on the cluster, set `gateway.manag
 Give its endpoint, credential and TLS material as environment references, as in [the external gateway example](../examples/kubernetes/external-gateway.yaml).
 NemoClaw then manages only the sandboxes; it neither installs nor removes the gateway.
 Sandboxes still need `image.metadata`.
+
+## Use a Model Server in the Cluster
+
+Sandboxes can use a model server that you run in the gateway's cluster.
+NemoClaw creates nothing for it: you deploy the server with your platform's own tools, and the sandboxes reach it through its Service.
+This has been tried on one kind cluster; [current limits](limits.md#platforms-models-and-placement) lists what is untested.
+Name the Service by its cluster DNS name and port:
+
+```yaml
+spec:
+  inferenceProviders:
+    - name: qwen
+      provider: openai
+      api: openai-completions
+      endpoint: http://qwen.models.svc.cluster.local:8000/v1
+      credential: {env: QWEN_INFERENCE_KEY}
+```
+
+- **Destination:** OpenShell decides which address the name may reach when sandboxes connect; NemoClaw grants no address.
+  OpenShell refuses the Kubernetes control-plane ports 2379, 2380, 6443, 10250 and 10255, so serve the model on another port.
+- **Key:** `credential` is optional.
+  It names the variable that holds the server's key where you run `nemoclaw`; OpenShell stores the key and adds it to sandbox requests.
+  Give the server the same key from a Secret, as [Supply the Key on Other Platforms](inference.md#supply-the-key-on-other-platforms) shows.
+  The key crosses the cluster network over plain HTTP unless your network plugin or a service mesh encrypts Pod traffic.
+- **Model IDs:** the machine running `nemoclaw` usually can't resolve cluster names, so onboarding can't list the server's models; write the route's model ID yourself.
+- **The server:** NemoClaw's vLLM and Ollama runtime images can run it; `vllm_runtime` and `ollama_runtime` describe the launch and requirements a platform needs ([Direct OpenTofu Usage](provider.md#direct-opentofu-usage)). Readiness is the platform's: point its probe at the server's health endpoint.
+
+Start from [the in-cluster vLLM example](../examples/kubernetes/in-cluster-vllm.yaml), or from [the in-cluster Ollama example](../examples/kubernetes/in-cluster-ollama.yaml) for a server without a key.
+Both examples use OpenClaw, which can't start in an OpenShell sandbox with the pinned Fabric, so apply stops at the agent until [#13372](https://github.com/NVIDIA/NemoClaw/issues/13372) is fixed.
 
 ## Destroy a Deployment
 

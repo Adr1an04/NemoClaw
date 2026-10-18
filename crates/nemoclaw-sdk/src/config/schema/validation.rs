@@ -404,7 +404,6 @@ pub(super) fn constrain(root: &mut Value, normalized: bool) {
     provider["else"] =
         json!({"required": ["endpoint"], "properties": {"endpoint": {"pattern": "^https?://"}}});
     provider["allOf"] = json!([
-        {"if": at("endpoint", json!({"pattern": "^http:"}), true), "then": forbid(&["credential"])},
         {"if": {"required":["api"]}, "then": {
             "if": at("api", json!({"const":"anthropic-messages"}), true),
             "then": at("provider", json!({"const":"anthropic"}), false),
