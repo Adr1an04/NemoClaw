@@ -76,10 +76,10 @@ There are no shell hooks, extra command arguments, or implicit model-specific se
 
 Snapshot directories include both repository and revision in their identity.
 Each directory stores one `.nemoclaw-manifest.json` with format `version: 1`, repository, revision, and expected files.
-Each file entry contains its name, size, SHA-256, and a `modified` timestamp after verification; `null` means unfinished.
+Each file entry contains its name, size, SHA-256, and a `modified` timestamp recorded once Hugging Face's client has downloaded it and its size matches; `null` means unfinished.
 Download progress does not change the model's identity.
 
-The runtime saves the manifest atomically after each file passes checksum verification.
+The runtime saves the manifest atomically once the download completes.
 Interrupted downloads retain partial files for explicit apply to resume.
 If a file was renamed before its manifest update was saved, apply verifies its checksum again without downloading it.
 There are no separate per-file verification records or completion files.

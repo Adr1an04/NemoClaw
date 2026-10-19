@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 mod authentication;
+mod download;
 mod hardware;
 mod inline_recipe;
 mod process;

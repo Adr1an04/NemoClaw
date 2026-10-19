@@ -305,24 +305,6 @@ The test checks managed runtime bindings as well as the hosted agent identity ac
 `cargo ci live-docker` builds the images and writes the owned inputs for the runtime image, Docker provider, standalone cache, dummy agent, and Docker gateway tests below, then runs them; see [Run each layer](testing.md#run-each-layer).
 To run one of them by hand, supply its inputs as its section describes.
 
-## Model Cache Compatibility
-
-Managed Ollama downloads models itself, so it has no cache test.
-
-Evaluate the Hugging Face client shipped in the vLLM base image with a private loopback server:
-
-```sh
-vllm_base=$(awk '$1 == "FROM" { print $2; exit }' runtimes/vllm/Dockerfile)
-docker pull "$vllm_base"
-docker run --rm --runtime=runc --network none --env HF_HUB_DISABLE_PROGRESS_BARS=1 \
-  --volume "$PWD/runtimes/vllm/test_download.py:/test_download.py:ro" \
-  --entrypoint python3 "$vllm_base" /test_download.py
-```
-
-This test documents why post-download verification cannot preserve bounded writes with the evaluated client.
-It expects the client to write an oversized fixture before raising a size error; if that behavior changes, reevaluate whether the owner client can replace NemoClaw's downloader.
-
-
 ## Runtime Image Loading
 
 On a native Linux host, complete the [runtime image build prerequisites](../build.md#build-a-runtime-image).

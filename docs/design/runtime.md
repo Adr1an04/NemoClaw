@@ -76,16 +76,12 @@ Image compatibility follows the backend; model storage identity includes the rep
 Parser acceptance does not establish image, checkpoint, capacity, or agent compatibility.
 
 The default service plan neither reads model metadata nor downloads or prepares a model.
-At startup, the vLLM runtime resolves a checksummed snapshot and retains resumable downloads and a manifest of expected files and verification metadata.
+At startup, the vLLM runtime resolves the pinned snapshot's files, sizes and checksums from Hugging Face's API, keeping only native safetensors, tokenizer and configuration files.
+The image's own [`hf download`](../../crates/nemoclaw-runtime/src/vllm/runtime/download.rs) client then downloads exactly those files at the commit revision; it resumes partial files and checks large files' SHA-256 as it downloads them.
+The runtime then records a manifest of each file's size and modification time, so later starts detect changed files without downloading again.
 Orchestration consumes runtime status instead of repeating artifact verification.
 Authentication or transport failures, incomplete inventories, and changed artifacts are errors, never absence.
 See [retained model files](../models.md#retained-model-files) for format compatibility.
-
-For vLLM, the shared downloader remains in `nemoclaw-runtime` because the evaluated Hugging Face client does not preserve all of these guarantees.
-The [pinned ARM64 vLLM image](../../runtimes/vllm/Dockerfile) contains `huggingface_hub` 1.28.0.
-Its [download API](https://github.com/huggingface/huggingface_hub/blob/v1.28.0/src/huggingface_hub/file_download.py) accepts a commit revision and resumes transfers, but its HTTP path checks the expected size after writing and resolves local cache paths through symlinks.
-Verification after that download would not preserve NemoClaw's bounded writes and cache-path checks.
-The retained implementation also bounds metadata reads, verifies checksums, preserves partial transfers, and treats authentication failures as errors.
 
 Managed Ollama downloads and stores models itself.
 At startup, the runtime asks the pinned Ollama to [pull](../../crates/nemoclaw-runtime/src/ollama/runtime/pull.rs) the authored model into its own storage on the retained volume, unless Ollama already reports it with the authored digest.
@@ -93,7 +89,6 @@ Ollama's pull takes no expected digest, so the runtime then requires Ollama's in
 A tag that moved upstream is therefore downloaded and then refused; the runtime never serves a model whose digest differs.
 Before loading, the [inventory check](../../crates/nemoclaw-runtime/src/ollama/runtime/observation.rs) confirms the same name and digest again.
 Custom images must satisfy this same behavioral contract; a version string alone does not establish compatibility.
-The [model cache test](../contributing/live-tests.md#model-cache-compatibility) checks that the pinned Hub client writes beyond the expected size before rejecting an oversized response.
 These checks use no GPU or inference; they do not establish model compatibility.
 
 Model-specific preparation belongs in an [inline recipe](recipes.md).
