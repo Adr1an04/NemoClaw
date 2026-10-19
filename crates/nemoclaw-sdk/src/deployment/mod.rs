@@ -19,7 +19,7 @@ use crate::{
     backend::Row,
     bundle::Bundle,
     compile::{self, Target},
-    config::{Credential, Document},
+    config::{Document, SecretRef},
     state::{Record, StateBinding, Store, atomic_write, save_json},
 };
 use plan::{Plan, check_destroy_plan, check_plan};
