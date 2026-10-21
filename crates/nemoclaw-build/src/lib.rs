@@ -12,6 +12,8 @@ pub mod fern;
 #[cfg(feature = "sdk")]
 pub mod helm_provider;
 pub mod images;
+pub mod release_assessment;
+pub mod release_sboms;
 #[cfg(feature = "sdk")]
 pub mod schema;
 mod source;
@@ -57,5 +59,3 @@ pub fn verify_source_version(expected: &str, files: &[(String, Vec<u8>)]) -> Res
     }
     Ok(())
 }
-
-pub mod release_sboms;

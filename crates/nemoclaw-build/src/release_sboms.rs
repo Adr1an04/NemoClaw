@@ -1,10 +1,20 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 //! Bind upstream-generated inventories to the release's complete platform set.
+//! Imported from NVIDIA/NemoClaw PR #13590 at
+//! 64b8aa7f32cc0bcaa2a5672ecb1d6d92a46a7a4f; local integration preserves its producer.
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeSet, fs, io::Read, path::Path, process::Command};
+use std::{
+    collections::BTreeSet,
+    fs,
+    io::Read,
+    path::Path,
+    process::{Child, Command, Stdio},
+    thread,
+    time::{Duration, Instant},
+};
 
 const LIMIT: u64 = 16_000_000;
 #[derive(Debug, Serialize)]
@@ -67,6 +77,13 @@ fn plan(inventory: &Value) -> Result<Vec<Entry>, String> {
             .ok_or("missing platform manifests")?;
         let mut platforms = BTreeSet::new();
         for manifest in manifests {
+            let digest = field(manifest, "digest")?;
+            if !self::digest(digest) {
+                return Err("invalid platform digest".into());
+            }
+            if crate::release_assessment::input::auxiliary_attestation(manifest) {
+                continue;
+            }
             let platform = &manifest["platform"];
             let arch = field(platform, "architecture")?;
             if field(platform, "os")? != "linux"
@@ -74,10 +91,6 @@ fn plan(inventory: &Value) -> Result<Vec<Entry>, String> {
                 || !platforms.insert(arch)
             {
                 return Err("unexpected or duplicate release platform".into());
-            }
-            let digest = field(manifest, "digest")?;
-            if !self::digest(digest) {
-                return Err("invalid platform digest".into());
             }
             entries.push(Entry {
                 reference: format!("{repository}@{digest}"),
@@ -150,11 +163,14 @@ pub fn generate(
 
 /// Syft owns package discovery and SPDX serialization; this tool only checks
 /// release coverage and the immutable image subject returned by Syft.
-pub fn run(inventory: &Path, output: &Path, syft: &Path) -> Result<(), String> {
+pub fn run(inventory: &Path, output: &Path, syft: &Path, timeout: Duration) -> Result<(), String> {
+    if timeout.is_zero() {
+        return Err("SBOM scanner timeout must be positive".into());
+    }
     let inventory: Value =
         serde_json::from_slice(&read(inventory, LIMIT)?).map_err(|e| e.to_string())?;
     let entries = generate(&inventory, output, |reference, spdx, source| {
-        let status = Command::new(syft)
+        let child = Command::new(syft)
             .arg(format!("registry:{reference}"))
             .args(["--select-catalogers", "+rust-cargo-lock-cataloger"])
             .arg("-o")
@@ -162,10 +178,31 @@ pub fn run(inventory: &Path, output: &Path, syft: &Path) -> Result<(), String> {
             .arg("-o")
             .arg(format!("syft-json={}", source.display()))
             .env("SYFT_CHECK_FOR_APP_UPDATE", "false")
-            .status()
-            .map_err(|e| e.to_string())?;
-        if !status.success() {
-            return Err("SBOM scanner failed".into());
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|_| "SBOM scanner could not start")?;
+        let mut child = OwnedScanner(child);
+        let started = Instant::now();
+        loop {
+            if let Some(status) = child
+                .0
+                .try_wait()
+                .map_err(|_| "SBOM scanner could not be observed")?
+            {
+                if !status.success() {
+                    return Err(format!(
+                        "SBOM scanner failed with exit status {:?}",
+                        status.code()
+                    ));
+                }
+                break;
+            }
+            if started.elapsed() >= timeout {
+                return Err("SBOM scanner timed out".into());
+            }
+            thread::sleep(Duration::from_millis(10));
         }
         Ok(())
     })?;
@@ -174,4 +211,12 @@ pub fn run(inventory: &Path, output: &Path, syft: &Path) -> Result<(), String> {
         serde_json::to_string(&entries).map_err(|e| e.to_string())?
     );
     Ok(())
+}
+
+struct OwnedScanner(Child);
+impl Drop for OwnedScanner {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
 }

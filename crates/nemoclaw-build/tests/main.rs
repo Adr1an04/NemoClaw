@@ -33,7 +33,8 @@ mod images;
 mod qualify;
 #[path = "registry_metadata.rs"]
 mod registry_metadata;
+#[path = "release_assessment.rs"]
+mod release_assessment;
+mod release_sboms;
 #[path = "schema.rs"]
 mod schema;
-
-mod release_sboms;

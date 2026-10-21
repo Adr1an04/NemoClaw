@@ -49,6 +49,32 @@ fn every_platform_gets_a_digest_bound_asset() {
 }
 
 #[test]
+fn explicitly_annotated_auxiliary_attestations_do_not_add_executable_scan_subjects() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut input = inventory();
+    input[0]["manifests"]["manifests"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+            "digest":format!("sha256:{}", "c".repeat(64)),
+            "platform":{"os":"unknown","architecture":"unknown"},
+            "annotations":{"vnd.docker.reference.type":"attestation-manifest"}
+        }));
+    let mut calls = 0;
+    let entries = generate(
+        &input,
+        &temp.path().join("assets"),
+        |reference, spdx, source| {
+            calls += 1;
+            scan(reference, spdx, source)
+        },
+    )
+    .unwrap();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(calls, 2);
+}
+
+#[test]
 fn missing_duplicate_or_unexpected_platforms_never_reach_the_scanner() {
     for case in [
         "missing",
@@ -159,6 +185,40 @@ fn existing_output_cannot_supply_stale_assets_to_a_rerun() {
         fs::read_to_string(output.join("hermes-linux-amd64.spdx.json")).unwrap(),
         "stale"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn stalled_sbom_generation_times_out_without_leaking_diagnostics_or_partial_assets() {
+    use std::{os::unix::fs::PermissionsExt, process::Command, time::Instant};
+    let temp = tempfile::tempdir().unwrap();
+    let input = temp.path().join("inventory.json");
+    fs::write(&input, serde_json::to_vec(&inventory()).unwrap()).unwrap();
+    let syft = temp.path().join("syft");
+    fs::write(
+        &syft,
+        "#!/bin/sh\nprintf secret-canary >&2\nexec /bin/sleep 30\n",
+    )
+    .unwrap();
+    fs::set_permissions(&syft, fs::Permissions::from_mode(0o700)).unwrap();
+    let assets = temp.path().join("assets");
+    let start = Instant::now();
+    let output = Command::new(env!("CARGO_BIN_EXE_nemoclaw-build"))
+        .arg("release-sboms")
+        .arg("--inventory")
+        .arg(&input)
+        .arg("--output")
+        .arg(&assets)
+        .arg("--syft")
+        .arg(&syft)
+        .args(["--timeout-seconds", "1"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("SBOM scanner timed out"));
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("secret-canary"));
+    assert!(start.elapsed() < std::time::Duration::from_secs(5));
+    assert!(!assets.exists());
 }
 
 #[cfg(unix)]
