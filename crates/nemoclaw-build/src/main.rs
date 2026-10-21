@@ -46,6 +46,20 @@ enum Action {
     },
     /// Freshly assess and bind private release evidence; never publish anything.
     ReleaseGate(assessment_cli::GateArgs),
+    /// Verify independently observed packages in saved canonical image inventories.
+    ReleaseQualify {
+        #[arg(long)]
+        inventory: PathBuf,
+        #[arg(long)]
+        sboms: PathBuf,
+        #[arg(long)]
+        sbom_directory: PathBuf,
+        #[arg(long)]
+        expectations: PathBuf,
+        /// Fresh absolute path for the local coverage receipt.
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Verify index and platform digests against the expected release inventory.
     ReleaseVerifyPromotion {
         #[arg(long)]
@@ -561,6 +575,33 @@ async fn bundle(pins: &Pins, platform: &str) -> Result<()> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    if let Action::ReleaseQualify {
+        inventory,
+        sboms,
+        sbom_directory,
+        expectations,
+        output,
+    } = &cli.command
+    {
+        match nemoclaw_build::release_qualification::verify(
+            inventory,
+            sboms,
+            sbom_directory,
+            expectations,
+            output,
+        ) {
+            Ok(receipt) => println!("{}", serde_json::to_string(&receipt)?),
+            Err(reason) => {
+                eprintln!("{reason}");
+                println!(
+                    "{}",
+                    serde_json::json!({"representative_coverage_verified":false,"publication_authorized":false,"problem":reason})
+                );
+                std::process::exit(3);
+            }
+        }
+        return Ok(());
+    }
     if let Action::ReleaseCatalog {
         catalog,
         candidate_revision,
@@ -835,6 +876,7 @@ async fn main() -> Result<()> {
         Action::Ci { .. }
         | Action::ReleaseSboms { .. }
         | Action::ReleaseGate(..)
+        | Action::ReleaseQualify { .. }
         | Action::ReleaseVerifyPromotion { .. }
         | Action::ReleaseMonitorPlan { .. }
         | Action::ReleaseCatalog { .. }

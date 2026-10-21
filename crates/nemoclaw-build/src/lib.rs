@@ -13,6 +13,7 @@ pub mod fern;
 pub mod helm_provider;
 pub mod images;
 pub mod release_assessment;
+pub mod release_qualification;
 pub mod release_sboms;
 #[cfg(feature = "sdk")]
 pub mod schema;

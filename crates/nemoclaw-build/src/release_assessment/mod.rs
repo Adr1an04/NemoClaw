@@ -24,6 +24,27 @@ pub struct Subject {
     sbom: Vec<u8>,
 }
 
+impl Subject {
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+    pub(crate) fn reference(&self) -> &str {
+        &self.reference
+    }
+    pub(crate) fn platform(&self) -> &str {
+        &self.platform
+    }
+    pub(crate) fn sha256(&self) -> &str {
+        &self.sha256
+    }
+    pub(crate) fn asset(&self) -> &str {
+        &self.asset
+    }
+    pub(crate) fn sbom(&self) -> &[u8] {
+        &self.sbom
+    }
+}
+
 #[derive(Debug, Clone, Serialize, thiserror::Error)]
 #[serde(tag = "category", rename_all = "snake_case")]
 pub enum AssessmentError {

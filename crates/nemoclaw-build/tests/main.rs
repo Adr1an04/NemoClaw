@@ -35,6 +35,7 @@ mod qualify;
 mod registry_metadata;
 #[path = "release_assessment.rs"]
 mod release_assessment;
+mod release_qualification;
 mod release_sboms;
 #[path = "schema.rs"]
 mod schema;
