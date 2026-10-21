@@ -30,15 +30,20 @@ NemoClaw installs nothing cluster-wide and never selects a context for you.
 ## Prepare Agent Images
 
 A cluster sandbox names its image's metadata bundle in `image.metadata`, because no local engine can inspect the image there.
-From the repository root, build the image, then write its bundle to a new file:
+
+For a published release, take both from the release: use an agent image's index reference from its notes in `image.ref`, and download the matching `<image>.metadata.json` it attaches.
+One bundle covers every Linux platform the index lists, so it serves ARM64 and AMD64 nodes.
+
+For an image you build, from the repository root, build it, then write its bundle to a new file:
 
 ```sh
 cargo images build --platform linux/amd64 openclaw
-cargo images export-metadata nc-fabric:openclaw --platform linux/amd64 --output openclaw.metadata.json
+cargo images export-metadata nc-fabric:openclaw --output openclaw.metadata.json
 ```
 
 Push the image, then use the digest of the pushed index in `image.ref`.
 The bundle is checked against that digest, so it must come from the same build.
+It covers every Linux platform the index lists, so one bundle serves ARM64 and AMD64 nodes.
 Set the environment variable named in `image.metadata` to the bundle's path before each command.
 See [Build agent images](build.md#build-agent-images) for the harnesses each platform builds.
 
