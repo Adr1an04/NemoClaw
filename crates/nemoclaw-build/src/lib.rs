@@ -57,3 +57,5 @@ pub fn verify_source_version(expected: &str, files: &[(String, Vec<u8>)]) -> Res
     }
     Ok(())
 }
+
+pub mod release_sboms;
