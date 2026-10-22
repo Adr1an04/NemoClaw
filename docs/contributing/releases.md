@@ -45,14 +45,22 @@ Only users with push access see a draft release, and the `v1` packages stay inte
 
 ## Test a Staged Release
 
+Use [image assessment](image-assessment.md) to evaluate saved SPDX inventories locally.
+The assessment does not authorize publication or replace the release approvals below.
+
 Deploy with the digests the draft lists.
 Docker deployments pull private images through `spec.registries`; Kubernetes deployments use `imagePullSecrets`.
 
 ## Publish
 
-Publishing is manual: publish the draft, then make each `v1` package public in its package settings.
-Making a package public can't be undone, and the organization's package policy may need an administrator.
+Keep the draft and packages private until installer, onboarding, QA, and product sign-off are complete.
+Configure the [protected security controller](image-assessment.md#configure-hosted-enforcement) before enabling `V1_SECURITY_PUBLICATION_ENABLED`.
+The controlled publisher requires security approval, a fresh passing assessment, unchanged registry digests, and successful SBOM attestation verification before publishing the draft.
+Treat direct manual draft publication as a governance bypass, not the normal release procedure; restrict that ability and package-administrator privileges separately.
+An administrator handles approved package visibility changes; making a package public cannot be undone.
 Before publishing, complete the provenance, SBOM, scanning, and license work ([#13521](https://github.com/NVIDIA/NemoClaw/issues/13521), [#13522](https://github.com/NVIDIA/NemoClaw/issues/13522), [#13523](https://github.com/NVIDIA/NemoClaw/issues/13523), [#13524](https://github.com/NVIDIA/NemoClaw/issues/13524)).
+The final-tag public documentation job also requires the published release and its bound passing gate receipt.
+If it ran while the release was still awaiting review, rerun that job after controlled publication completes.
 
 ## SBOM Assets and Attestations
 
