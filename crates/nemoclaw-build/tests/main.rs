@@ -35,6 +35,8 @@ mod qualify;
 mod registry_metadata;
 #[path = "release_assessment.rs"]
 mod release_assessment;
+#[cfg(unix)]
+mod release_gate;
 mod release_qualification;
 mod release_sboms;
 #[path = "schema.rs"]
