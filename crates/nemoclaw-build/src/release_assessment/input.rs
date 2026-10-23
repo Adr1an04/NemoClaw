@@ -233,7 +233,6 @@ fn validate_spdx(bytes: &[u8]) -> Result<(), String> {
 
 pub(super) struct Expected {
     name: String,
-    digest: String,
 }
 
 pub(crate) fn auxiliary_attestation(manifest: &Value) -> bool {
@@ -305,10 +304,7 @@ pub(super) fn expected_subjects(
             }
             expected.insert(
                 (format!("{repository}@{digest}"), format!("linux/{arch}")),
-                Expected {
-                    name: name.into(),
-                    digest: digest.into(),
-                },
+                Expected { name: name.into() },
             );
         }
         if platforms != BTreeSet::from(["amd64", "arm64"]) {
@@ -345,15 +341,11 @@ fn load_checked(
     for entry in entries {
         let reference = field(entry, "reference")?;
         let platform = field(entry, "platform")?;
-        let digest = field(entry, "digest")?;
         let key = (reference.to_owned(), platform.to_owned());
         let subject = expected
             .get(&key)
             .ok_or("SBOM names an unexpected subject")?;
-        if !seen.insert(key)
-            || subject.digest != digest
-            || reference != format!("{}@{digest}", field(entry, "repository")?)
-        {
+        if !seen.insert(key) {
             return Err("SBOM mapping duplicates or substitutes an expected subject".into());
         }
         let asset = field(entry, "asset")?;
@@ -411,8 +403,8 @@ mod tests {
             fs::write(dir.path().join(&asset), &sbom).unwrap();
             manifests
                 .push(json!({"digest": digest, "platform": {"os": "linux", "architecture": arch}}));
-            mapping.push(json!({"reference": format!("{repository}@{digest}"), "repository": repository,
-                "digest": digest, "platform": format!("linux/{arch}"), "asset": asset, "sha256": hash}));
+            mapping.push(json!({"reference": format!("{repository}@{digest}"),
+                "platform": format!("linux/{arch}"), "asset": asset, "sha256": hash}));
         }
         let inventory = json!([{"name": "hermes", "repository": repository, "manifests": {"manifests": manifests}}]);
         (dir, inventory, json!(mapping))
@@ -430,6 +422,20 @@ mod tests {
         .unwrap();
         fs::write(dir.join("sboms.json"), serde_json::to_vec(mapping).unwrap()).unwrap();
         load(&dir.join("inventory.json"), &dir.join("sboms.json"), dir)
+    }
+
+    #[test]
+    fn staged_mapping_binds_subjects_through_immutable_references() {
+        let (dir, inventory, mapping) = fixture();
+        let subjects = run(dir.path(), &inventory, &mapping).unwrap();
+        assert_eq!(subjects.len(), 2);
+        for subject in subjects {
+            assert!(mapping.as_array().unwrap().iter().any(|entry| {
+                entry["reference"] == subject.reference
+                    && entry["platform"] == subject.platform
+                    && entry["sha256"] == subject.sha256
+            }));
+        }
     }
 
     #[test]
@@ -552,7 +558,12 @@ mod tests {
                 "duplicate" => {
                     mapping[1] = mapping[0].clone();
                 }
-                "digest" => mapping[0]["digest"] = json!(format!("sha256:{}", "c".repeat(64))),
+                "digest" => {
+                    mapping[0]["reference"] = json!(format!(
+                        "ghcr.io/nvidia/nemoclaw/candidates/hermes@sha256:{}",
+                        "c".repeat(64)
+                    ))
+                }
                 "platform" => mapping[0]["platform"] = json!("linux/s390x"),
                 "reference" => mapping[0]["reference"] = json!("ghcr.io/other/image:latest"),
                 "empty" => mapping = json!([]),

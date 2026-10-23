@@ -275,12 +275,6 @@ pub fn bind(
                     && v["platform"] == subject.platform
                     && v["sha256"] == subject.sha256
                     && v["asset"] == subject.asset
-                    && v["repository"]
-                        .as_str()
-                        .zip(v["digest"].as_str())
-                        .is_some_and(|(repository, digest)| {
-                            format!("{repository}@{digest}") == subject.reference
-                        })
             })
             .count()
             != 1
@@ -406,7 +400,7 @@ mod tests {
             manifests.push(
                 json!({"digest":digest,"platform":{"os":"linux","architecture":architecture}}),
             );
-            mapping.push(json!({"reference":reference,"repository":"registry.example/hermes","digest":digest,"platform":platform,"sha256":sha256,"asset":format!("hermes-{architecture}.spdx.json")}));
+            mapping.push(json!({"reference":reference,"platform":platform,"sha256":sha256,"asset":format!("hermes-{architecture}.spdx.json")}));
         }
         let inventory = json!([{"name":"hermes","repository":"registry.example/hermes","index_digest":format!("sha256:{}","d".repeat(64)),"manifests":{"manifests":manifests}}]);
         let assessment = Assessment {
@@ -639,12 +633,16 @@ mod tests {
         for changed in [
             {
                 let mut v = mapping.clone();
-                v[0]["repository"] = json!("registry.example/substituted");
+                v[0]["reference"] = json!(format!(
+                    "registry.example/substituted@sha256:{}",
+                    "a".repeat(64)
+                ));
                 v
             },
             {
                 let mut v = mapping.clone();
-                v[0]["digest"] = json!(format!("sha256:{}", "7".repeat(64)));
+                v[0]["reference"] =
+                    json!(format!("registry.example/hermes@sha256:{}", "7".repeat(64)));
                 v
             },
         ] {

@@ -3,16 +3,16 @@
 //! Opt-in qualification of actual, externally selected release images.
 //!
 //! Set NEMOCLAW_QUALIFICATION_CONFIG to an absolute JSON configuration path,
-//! and NEMOCLAW_TEST_SYFT, NEMOCLAW_TEST_GRYPE, NEMOCLAW_TEST_GRYPE_DB to the
-//! verified tools and prepared database. NEMOCLAW_TEST_DOCKER names the Docker
+//! and NEMOCLAW_TEST_GRYPE, NEMOCLAW_TEST_GRYPE_DB to the verified scanner and
+//! prepared database. NEMOCLAW_TEST_DOCKER names the Docker
 //! CLI with Buildx for read-only index observations; no workload is started.
-//! The configuration names the inventory,
+//! The configuration names the inventory, sboms, sbom_directory,
 //! exception policy, reviewed_policy_sha256, release_tag, controller_revision,
 //! tool checksums, a fresh absolute output_directory, and subject expectations.
 //! Each expectation has image, platform, and packages; each package has family
 //! (os, fabric_python, node, supervisor_rust, or proxy_rust), name, version,
 //! purl, and source_path as observed independently in the selected image.
-//! This test reads registry images and retains private evidence locally; it does
+//! This test observes registry indexes and reads saved staging assets; it does
 //! not run workloads, update the database, upload reports, or publish anything.
 
 use nemoclaw_build::release_qualification::{Family, Package, SubjectExpectation, package_matches};
@@ -31,11 +31,12 @@ use std::{
 #[serde(deny_unknown_fields)]
 struct Configuration {
     inventory: PathBuf,
+    sboms: PathBuf,
+    sbom_directory: PathBuf,
     exceptions: PathBuf,
     reviewed_policy_sha256: String,
     release_tag: String,
     controller_revision: String,
-    syft_sha256: String,
     grype_sha256: String,
     output_directory: PathBuf,
     expectations: Vec<SubjectExpectation>,
@@ -243,6 +244,8 @@ fn actual_release_images_preserve_reviewed_package_coverage_and_gate_binding() {
             .expect("invalid qualification configuration");
     assert!(
         config.inventory.is_absolute()
+            && config.sboms.is_absolute()
+            && config.sbom_directory.is_absolute()
             && config.exceptions.is_absolute()
             && config.output_directory.is_absolute(),
         "qualification configuration paths must be absolute"
@@ -258,21 +261,14 @@ fn actual_release_images_preserve_reviewed_package_coverage_and_gate_binding() {
         config.reviewed_policy_sha256,
         "qualification policy checksum mismatch"
     );
-    let syft = environment_path("NEMOCLAW_TEST_SYFT");
     let grype = environment_path("NEMOCLAW_TEST_GRYPE");
     let database = environment_path("NEMOCLAW_TEST_GRYPE_DB");
     let docker = environment_path("NEMOCLAW_TEST_DOCKER");
-    assert_eq!(
-        file_hash(&syft),
-        config.syft_sha256,
-        "qualification Syft checksum mismatch"
-    );
     assert_eq!(
         file_hash(&grype),
         config.grype_sha256,
         "qualification Grype checksum mismatch"
     );
-    tool_version(&syft, "1.55.0");
     tool_version(&grype, "0.121.0");
     let private = tempfile::tempdir_in(config.output_directory.parent().unwrap())
         .expect("cannot create private qualification directory");
@@ -317,22 +313,9 @@ fn actual_release_images_preserve_reviewed_package_coverage_and_gate_binding() {
             "actual release index platform descriptors differ from the selected inventory"
         );
     }
-    let sboms = root.join("sboms");
-    let mut producer = Command::new(env!("CARGO_BIN_EXE_nemoclaw-build"));
-    producer
-        .arg("release-sboms")
-        .arg("--inventory")
-        .arg(&config.inventory)
-        .arg("--output")
-        .arg(&sboms)
-        .arg("--syft")
-        .arg(&syft);
-    assert!(
-        run(&mut producer, root, "producer").success(),
-        "actual registry SBOM generation failed; inspect private evidence"
-    );
-    let mapping_path = sboms.join("sboms.json");
-    let mapping = value(&mapping_path);
+    let sboms = &config.sbom_directory;
+    let mapping_path = &config.sboms;
+    let mapping = value(mapping_path);
     let expectations = root.join("package-expectations.json");
     fs::write(
         &expectations,
@@ -346,9 +329,9 @@ fn actual_release_images_preserve_reviewed_package_coverage_and_gate_binding() {
         .arg("--inventory")
         .arg(&config.inventory)
         .arg("--sboms")
-        .arg(&mapping_path)
+        .arg(mapping_path)
         .arg("--sbom-directory")
-        .arg(&sboms)
+        .arg(sboms)
         .arg("--expectations")
         .arg(&expectations)
         .arg("--output")
@@ -364,15 +347,15 @@ fn actual_release_images_preserve_reviewed_package_coverage_and_gate_binding() {
         coverage["inventory_sha256"],
         hash(&bytes(&config.inventory))
     );
-    assert_eq!(coverage["sboms_sha256"], hash(&bytes(&mapping_path)));
+    assert_eq!(coverage["sboms_sha256"], hash(&bytes(mapping_path)));
     assert_eq!(coverage["expectations_sha256"], hash(&bytes(&expectations)));
     let output = root.join("gate");
     let status = run(
         &mut gate(
             &config,
             &config.inventory,
-            &mapping_path,
-            &sboms,
+            mapping_path,
+            sboms,
             &grype,
             &database,
             &output,
@@ -389,7 +372,7 @@ fn actual_release_images_preserve_reviewed_package_coverage_and_gate_binding() {
     assert_eq!(receipt["release_tag"], config.release_tag);
     assert_eq!(receipt["controller_revision"], config.controller_revision);
     assert_eq!(receipt["inventory_sha256"], hash(&bytes(&config.inventory)));
-    assert_eq!(receipt["sboms_sha256"], hash(&bytes(&mapping_path)));
+    assert_eq!(receipt["sboms_sha256"], hash(&bytes(mapping_path)));
     assert_eq!(
         receipt["assessment_sha256"],
         hash(&bytes(&output.join("assessment.json")))
@@ -456,7 +439,7 @@ fn actual_release_images_preserve_reviewed_package_coverage_and_gate_binding() {
                 &config,
                 &altered_inventory,
                 &altered_mapping,
-                &sboms,
+                sboms,
                 &root.join("must-not-run"),
                 &database,
                 &denied,
@@ -478,7 +461,7 @@ fn actual_release_images_preserve_reviewed_package_coverage_and_gate_binding() {
             "input"
         );
     }
-    let summary = json!({"schema_version":1,"actual_registry_images":true,"publication_authorized":false,"release_tag":config.release_tag,"controller_revision":config.controller_revision,"tested_binary_sha256":file_hash(Path::new(env!("CARGO_BIN_EXE_nemoclaw-build"))),"syft_sha256":config.syft_sha256,"grype_sha256":config.grype_sha256,"docker_cli_sha256":file_hash(&docker),"platform_subjects":config.expectations.len(),"status":receipt["status"],"limits":["No workload execution or exploitability qualification","No registry visibility, hosted approval, or code-scanning ingestion qualification","Caller supplies independent package expectations and approved policy identity"]});
+    let summary = json!({"schema_version":1,"actual_registry_images":true,"publication_authorized":false,"release_tag":config.release_tag,"controller_revision":config.controller_revision,"tested_binary_sha256":file_hash(Path::new(env!("CARGO_BIN_EXE_nemoclaw-build"))),"grype_sha256":config.grype_sha256,"docker_cli_sha256":file_hash(&docker),"platform_subjects":config.expectations.len(),"status":receipt["status"],"limits":["No workload execution or exploitability qualification","No registry visibility, hosted approval, or code-scanning ingestion qualification","Caller supplies saved staging assets, independent package expectations and approved policy identity"]});
     fs::write(
         root.join("qualification-summary.json"),
         serde_json::to_vec_pretty(&summary).unwrap(),

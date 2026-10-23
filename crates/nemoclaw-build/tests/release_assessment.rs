@@ -233,7 +233,7 @@ fn real_image_catalogs_retain_four_ecosystems_and_targeted_fixes() {
                 "Syft failed for {variant}/{architecture}"
             );
             let digest = manifest["digest"].as_str().unwrap();
-            mapping.push(json!({"reference":format!("{repository}@{digest}"),"repository":repository,"digest":digest,"platform":platform,"asset":asset,"sha256":nemoclaw_build::hex(&Sha256::digest(fs::read(&spdx).unwrap()))}));
+            mapping.push(json!({"reference":format!("{repository}@{digest}"),"platform":platform,"asset":asset,"sha256":nemoclaw_build::hex(&Sha256::digest(fs::read(&spdx).unwrap()))}));
         }
         let inventory = root.path().join("inventory.json");
         let sboms = root.path().join("sboms.json");

@@ -172,18 +172,17 @@ pub fn verify_public_release(
         .filter(|entries| !entries.is_empty())
         .ok_or_else(|| invalid("release must contain saved SPDX mappings"))?
     {
-        let Some(repository) = entry["repository"].as_str() else {
-            return Err(invalid("SPDX mapping has no repository"));
-        };
-        let Some(digest) = entry["digest"].as_str() else {
-            return Err(invalid("SPDX mapping has no digest"));
+        let Some((repository, digest)) = entry["reference"]
+            .as_str()
+            .and_then(|reference| reference.split_once('@'))
+        else {
+            return Err(invalid("SPDX mapping has no immutable image reference"));
         };
         let Some(asset) = entry["asset"].as_str() else {
             return Err(invalid("SPDX mapping has no asset name"));
         };
         if !repositories.contains(repository)
             || !digest.strip_prefix("sha256:").is_some_and(sha256)
-            || entry["reference"] != format!("{repository}@{digest}")
             || !matches!(
                 entry["platform"].as_str(),
                 Some("linux/amd64" | "linux/arm64")
@@ -246,7 +245,7 @@ mod tests {
         let repository = "ghcr.io/nvidia/nemoclaw/v1/hermes";
         let digest = format!("sha256:{}", "d".repeat(64));
         let inventory = serde_json::to_vec(&json!([{"name":"hermes","repository":repository,"index_digest":format!("sha256:{}","e".repeat(64)),"manifests":{"manifests":[]}}])).unwrap();
-        let mapping = serde_json::to_vec(&json!([{"repository":repository,"reference":format!("{repository}@{digest}"),"digest":digest,"platform":"linux/amd64","asset":"hermes-amd64.spdx.json","sha256":"f".repeat(64)}])).unwrap();
+        let mapping = serde_json::to_vec(&json!([{"reference":format!("{repository}@{digest}"),"platform":"linux/amd64","asset":"hermes-amd64.spdx.json","sha256":"f".repeat(64)}])).unwrap();
         let release = SupportedRelease {
             tag: "v0.1.0".into(),
             inventory_sha256: crate::hex(&Sha256::digest(&inventory)),

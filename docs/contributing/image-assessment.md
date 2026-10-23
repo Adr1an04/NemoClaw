@@ -19,11 +19,11 @@ Choose the maximum database age explicitly for the assessment; that local choice
 Keep these inputs together:
 
 - The expected image inventory, including each image's name, repository, and platform manifest descriptors.
-- The `sboms.json` mapping, with each executable platform's immutable image reference, digest, platform, SPDX asset name, and SHA-256.
+- The `sboms.json` mapping, with each executable platform's immutable image reference, platform, SPDX asset name, and SHA-256.
 - The saved SPDX 2.3 assets named by that mapping.
 
-The saved mapping follows the interface proposed by [#13590](https://github.com/NVIDIA/NemoClaw/pull/13590).
-This candidate includes that producer from commit `64b8aa7f32cc0bcaa2a5672ecb1d6d92a46a7a4f`; keep the upstream dependency visible when reviewing or splitting the change.
+Use the mapping and SPDX assets produced by [release staging](releases.md#sbom-assets).
+The image and release workflows own SBOM generation and reuse; assessment consumes their saved assets.
 The assessment command does not generate an inventory or an SBOM.
 Keep candidate acquisition locations separate from eventual public publication locations when producing the inputs.
 The inventory supplied by the caller defines expected coverage; passing its consistency checks does not authenticate its source.
@@ -204,7 +204,7 @@ Review an exception's continued justification and expiry before changing its val
 ## Qualify Actual Release Images
 
 The metadata-only OCI test above does not qualify NVIDIA release image contents.
-After generating saved SBOMs with `release-sboms`, use `release-qualify` to check representative packages against independent observations of the selected images.
+Use `release-qualify` on the saved staging assets to check representative packages against independent observations of the selected images.
 It accepts only canonical `ghcr.io/nvidia/nemoclaw/v1/<image>` repositories and requires both Linux architectures for every selected image.
 Use the complete staged inventory to qualify a whole release; selecting a subset establishes coverage only for that subset.
 It reads local files without pulling images, running scanners or workloads, or publishing evidence.

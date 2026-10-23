@@ -26,17 +26,6 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Action {
-    /// Generate digest-bound SPDX assets for the staged image inventory.
-    ReleaseSboms {
-        #[arg(long)]
-        inventory: PathBuf,
-        #[arg(long)]
-        output: PathBuf,
-        #[arg(long, default_value = "syft")]
-        syft: PathBuf,
-        #[arg(long, default_value = "900")]
-        timeout_seconds: std::num::NonZeroU64,
-    },
     /// Assess saved release SBOMs without authorizing or publishing a release.
     ReleaseAssess {
         #[command(flatten)]
@@ -658,21 +647,6 @@ async fn main() -> Result<()> {
         );
         std::process::exit(if valid { 0 } else { 3 });
     }
-    if let Action::ReleaseSboms {
-        inventory,
-        output,
-        syft,
-        timeout_seconds,
-    } = &cli.command
-    {
-        return nemoclaw_build::release_sboms::run(
-            inventory,
-            output,
-            syft,
-            Duration::from_secs(timeout_seconds.get()),
-        )
-        .map_err(Into::into);
-    }
     if let Action::ReleaseAssess { inputs, format } = cli.command {
         use nemoclaw_build::release_assessment::{self, Assessment};
         let result = inputs.assess().map(|(_, assessment)| assessment);
@@ -874,7 +848,6 @@ async fn main() -> Result<()> {
             unreachable!("documentation generation returned before build tool checks")
         }
         Action::Ci { .. }
-        | Action::ReleaseSboms { .. }
         | Action::ReleaseGate(..)
         | Action::ReleaseQualify { .. }
         | Action::ReleaseVerifyPromotion { .. }
