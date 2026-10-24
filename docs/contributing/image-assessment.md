@@ -35,7 +35,7 @@ Missing, duplicate, ambiguous, or substituted subjects prevent a complete assess
 Each SPDX document must identify its creators and creation time and give packages unique IDs and usable names.
 Assessable packages need a version and a versioned package URL or CPE reference for matching.
 Structural source entries do not count as software inventory; at least one identifiable software package is required.
-A package missing its required matching identity makes the input invalid instead of being silently omitted.
+Grype can't match a package without one, such as an npm subpath export or an unversioned binary that Syft records; the report counts those per platform as `unidentified_packages`.
 These checks establish minimum matching information, not complete SPDX conformance or source-image package coverage.
 
 ## Run an Assessment
@@ -49,10 +49,10 @@ cargo run --locked -p nemoclaw-build --no-default-features -- release-assess \
   --sbom-directory /path/to/sboms \
   --grype /path/to/grype \
   --database /path/to/grype-database \
-  --max-db-age-hours 24
+  --max-db-age-hours 72
 ```
 
-The example chooses a 24-hour age limit for this invocation.
+The release workflow uses a 72-hour limit: Anchore publishes the database about once a day, often more than 24 hours apart.
 Use `--timeout-seconds` to change the per-process timeout from its 120-second default.
 Use `--format json` for structured output; text is the default.
 Use `--format sarif` to generate a local SARIF 2.1.0 report without uploading it.
@@ -69,15 +69,17 @@ Do not send that output to public workflow logs or artifacts without disclosure 
 |---|---|---|
 | Assessment passed | `0` | No blocking finding was identified in complete, valid inputs; handle release approvals separately. |
 | Assessment blocked | `2` | Update the affected dependency or base-image pin and assess the new image digest. |
-| Assessment incomplete | `3` | Repair invalid or missing evidence, refresh the database, or review an unusable finding severity, then rerun. |
+| Assessment incomplete | `3` | Repair invalid or missing evidence, refresh the database, or review an unsupported finding severity, then rerun. |
 
 Argument-usage errors also use exit code `2`, with the parser's usage diagnostic rather than an assessment report.
 Every assessment reports that publication is not authorized.
 An incomplete assessment retains any findings already obtained; it does not establish an absence of vulnerabilities.
 
-Known High and Critical findings block the assessment, including findings inherited from a base image.
+High and Critical findings with a published fix block the assessment, including findings inherited from a base image.
+Without a fixed version there is nothing to update, so the finding stays in the report without blocking; a later assessment blocks once a fix is published.
+Findings of `Unknown` severity are reported without blocking.
 The report preserves the scanner's selected severity and source, package version, advisory aliases, and available fixed versions.
-A High or Critical finding still blocks when no fixed version is reported.
+The assessment configures no ignore rules, but Grype's built-in rules still apply, such as the one for kernel CVEs matched indirectly to kernel headers; the report counts those matches per platform as `suppressed_matches`.
 The raw assessment accepts no risk exceptions; exception evaluation keeps these findings intact.
 
 After changing a dependency, regenerate the affected inventory and SBOM assets and reassess them.
@@ -115,7 +117,7 @@ Use the same scanner and input flags as `release-assess`, then add these control
 cargo run --locked -p nemoclaw-build --no-default-features -- release-gate \
   --inventory /private/inventory.json --sboms /private/sboms.json \
   --sbom-directory /private/sboms --grype /tools/grype --database /private/grype-db \
-  --max-db-age-hours 24 --release-tag v0.1.0-rc1 \
+  --max-db-age-hours 72 --release-tag v0.1.0-rc1 \
   --controller-revision <full-reviewed-controller-commit> \
   --exceptions .github/security/v1-vulnerability-exceptions.json \
   --reviewed-policy-sha256 <approved-policy-sha256> \
@@ -147,8 +149,8 @@ Entries apply only to the exact assessed image digest and platform, so another r
 That lifetime is a proposed policy choice for maintainer review, not a previously established release policy.
 The protected controller binds the reviewed policy bytes before approval.
 An editable reviewer name or approval boolean cannot authorize an exception.
-Unknown severity and incomplete scan evidence remain incomplete even when an exception matches.
-Raw JSON and SARIF retain every finding without suppression.
+Incomplete scan evidence remains incomplete even when an exception matches.
+The JSON report retains every finding.
 
 ## Configure Hosted Enforcement
 
@@ -162,10 +164,12 @@ The controller is frozen before approval and used again by the publisher; candid
 The publisher prepares a fresh advisory database, reassesses the saved inputs, verifies current registry digests, and only then publishes the draft.
 `V1_SECURITY_PUBLICATION_ENABLED` must be explicitly set to `true` after the existing product and QA sign-offs; it defaults off.
 The workflow does not change package visibility.
-The candidate's Bake catalog supplies the production agent image names as validated data; the controller appends the proxy and runtime images.
+Release candidates run the same assessment report-only, without approval: the job attaches `assessment.json`, `assessment.sarif`, and `gate.json` to the private draft and warns, instead of failing, when the policy would block publication.
+The tag's Bake catalog supplies the production agent image names; staging validates them and appends the proxy and runtime images.
 New harnesses join vulnerability coverage through that catalog, without a separate scanner allowlist or changes to Fabric's adapter contract.
 
-SARIF identifies the saved SPDX artifact and logical package, without inventing source-code lines.
+SARIF lists only High and Critical findings: code scanning keeps 5,000 results per run, and a release has thousands of lower-severity findings.
+It identifies the saved SPDX artifact and logical package, without inventing source-code lines.
 Its per-release analysis category and finding fingerprints remain stable across rescans.
 Uploads exceeding the supported result limit fail rather than silently dropping findings; the complete local report is retained.
 Successful local schema validation does not establish successful hosted ingestion or alert rendering.
@@ -200,46 +204,3 @@ A policy checksum mismatch stops that release before assessment or upload; it ne
 Repair stale manifest hashes through the reviewed update above, then rerun the monitor.
 A current hash does not extend an exception: an expired applicable exception makes the assessment incomplete, retains the raw findings, and cannot produce a passing release gate.
 Review an exception's continued justification and expiry before changing its validity window; the 30-day limit still applies.
-
-## Qualify Actual Release Images
-
-The metadata-only OCI test above does not qualify NVIDIA release image contents.
-Use `release-qualify` on the saved staging assets to check representative packages against independent observations of the selected images.
-It accepts only canonical `ghcr.io/nvidia/nemoclaw/v1/<image>` repositories and requires both Linux architectures for every selected image.
-Use the complete staged inventory to qualify a whole release; selecting a subset establishes coverage only for that subset.
-It reads local files without pulling images, running scanners or workloads, or publishing evidence.
-
-Prepare an expectations JSON array with one object per selected image/platform, containing `image`, `platform`, and a nonempty `packages` array.
-Each package object contains `family`, `name`, `version`, `purl`, and `source_path`.
-Obtain those values from the image's installed package metadata or retained build inventory independently of the SPDX document being checked.
-Copying expectations from that document cannot establish independent coverage.
-
-| Family | Expected package and source |
-|---|---|
-| `os` | An OS package with its absolute package-metadata path. |
-| `fabric_python` | A Python package under `/opt/fabric/`. |
-| `node` | An npm package with a source path containing `/node_modules/`. |
-| `supervisor_rust` | A Cargo package from `/opt/nemoclaw/source/supervisor/Cargo.lock`. |
-| `proxy_rust` | A Cargo package from `/usr/share/doc/nemoclaw-ollama-proxy/Cargo.lock`. |
-
-Across the selected images, expectations must cover `os`, `fabric_python`, `node`, and `supervisor_rust` on each architecture.
-Every selected `ollama-proxy` subject also requires a `proxy_rust` observation.
-Every selected `vllm` and `ollama` subject requires a `supervisor_rust` observation.
-Missing subjects, duplicate observations, mismatched package identities or paths, and substituted SPDX bytes prevent a coverage receipt.
-
-From the repository root, use absolute input paths and a fresh absolute path for the output file whose parent directory already exists:
-
-```sh
-cargo run --locked -p nemoclaw-build --no-default-features -- release-qualify \
-  --inventory /private/actual-release/inventory.json \
-  --sboms /private/actual-release/sboms.json \
-  --sbom-directory /private/actual-release/sboms \
-  --expectations /private/actual-release/expectations.json \
-  --output /private/actual-release/coverage.json
-```
-
-Exit code `0` means the saved inventories contain the independently expected representative packages; validation failures use `3` and do not create a new coverage receipt.
-The receipt binds the inventory, mapping, and expectations checksums, each platform subject and SPDX checksum, and the checked packages.
-It reports `representative_coverage_verified: true`, while `package_completeness_verified`, `image_source_authenticated`, and `publication_authorized` remain `false`.
-A coverage receipt neither authenticates the images or observations nor establishes a passing vulnerability assessment.
-Keep it private with the saved inputs, then perform fresh registry observations and the separate `release-gate` assessment before release approval.

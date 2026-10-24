@@ -56,13 +56,11 @@ Docker deployments pull private images through `spec.registries`; Kubernetes dep
 Keep the draft and packages private until installer, onboarding, QA, and product sign-off are complete.
 Configure the [protected security controller](image-assessment.md#configure-hosted-enforcement) before enabling `V1_SECURITY_PUBLICATION_ENABLED`.
 The controlled publisher requires security approval, a fresh passing assessment, and unchanged registry digests before publishing the draft.
-Security disclosure and controlled publication run only for final release tags; release candidates retain private draft assets.
+Security disclosure and controlled publication run only for final release tags.
+Release candidates run the same assessment report-only and attach it to the private draft, so blocking findings surface before the final tag.
 Restrict direct manual publication and package-administrator privileges separately; those powers can bypass the workflow.
 An administrator handles approved package visibility changes; making a package public cannot be undone.
 Before publishing, complete the provenance, SBOM, scanning, and license work ([#13521](https://github.com/NVIDIA/NemoClaw/issues/13521), [#13522](https://github.com/NVIDIA/NemoClaw/issues/13522), [#13523](https://github.com/NVIDIA/NemoClaw/issues/13523), [#13524](https://github.com/NVIDIA/NemoClaw/issues/13524)).
-
-The final-tag public documentation job also requires the published release and its bound passing gate receipt.
-If it ran while release review was pending, rerun it after controlled publication.
 
 ## SBOM Assets
 

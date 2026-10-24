@@ -63,8 +63,8 @@ jobs:
           [ "$rebuild" = true ] && source=$GITHUB_SHA
           echo "source=$source" >> "$GITHUB_OUTPUT"
           echo "rebuild=$rebuild" >> "$GITHUB_OUTPUT"
-          # Only inert names cross into the trusted controller. Candidate
-          # Bake/config evaluation runs here without publication credentials.
+          # Evaluate the Bake configuration here, without publication credentials;
+          # only the agent names reach the stage job, which validates them.
           catalog=$(docker buildx bake --print agents | jq -ce --arg candidate "$GITHUB_SHA" --arg source "$source" \
             '{candidate_revision:$candidate,source_revision:$source,agents:(.target | keys)}')
           echo "catalog=$catalog" >> "$GITHUB_OUTPUT"
@@ -158,7 +158,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.security-controller.outputs.revision }}
           persist-credentials: false
       - name: Install the pinned SBOM generator
         id: syft
@@ -315,10 +314,51 @@ jobs:
           echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           policy=.github/security/v1-vulnerability-exceptions.json
           echo "policy_sha256=$(sha256sum "$policy" | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+  candidate-security:
+    name: Assess the release candidate privately
+    needs: [stage, security-controller]
+    # Report-only, so blocking findings surface before the final tag. The
+    # findings stay in the private draft, and a blocked result doesn't fail the run.
+    if: ${{ contains(github.ref_name, '-') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.security-controller.outputs.revision }}
+          persist-credentials: false
+      - name: Assess the staged release
+        id: gate
+        uses: ./.github/actions/release-assessment
+        with:
+          tag: ${{ github.ref_name }}
+          inventory-sha256: ${{ needs.stage.outputs.inventory_sha256 }}
+          sboms-sha256: ${{ needs.stage.outputs.sboms_sha256 }}
+          policy-sha256: ${{ needs.security-controller.outputs.policy_sha256 }}
+          controller-revision: ${{ needs.security-controller.outputs.revision }}
+          token: ${{ github.token }}
+      - name: Attach the assessment to the draft
+        if: steps.gate.outputs.report == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "$RUNNER_TEMP/security-report"/*
+      - name: Report the result without disclosing findings
+        env:
+          RESULT: ${{ steps.gate.outputs.result }}
+        run: |
+          case "$RESULT" in
+            0) echo 'The release candidate passes the release security policy.' >> "$GITHUB_STEP_SUMMARY" ;;
+            2) echo "::warning::The release security policy would block publishing; the draft holds the assessment." ;;
+            *) echo "::error::The security assessment is incomplete; the draft holds what it recorded."; exit 1 ;;
+          esac
   security:
     name: Review security and approve finding disclosure
     needs: [stage, security-controller]
-    # Release candidates keep their inventories private with the draft.
     if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -346,56 +386,16 @@ jobs:
           ref: ${{ needs.security-controller.outputs.revision }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Download and verify the private staged inputs
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-          INVENTORY_SHA256: ${{ needs.stage.outputs.inventory_sha256 }}
-          SBOMS_SHA256: ${{ needs.stage.outputs.sboms_sha256 }}
-          POLICY_SHA256: ${{ needs.security-controller.outputs.policy_sha256 }}
-        run: |
-          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
-          inputs="$RUNNER_TEMP/security-inputs"
-          mkdir "$inputs"
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern inventory.json --pattern sboms.json --dir "$inputs"
-          printf '%s  %s\n' "$INVENTORY_SHA256" "$inputs/inventory.json" "$SBOMS_SHA256" "$inputs/sboms.json" "$POLICY_SHA256" .github/security/v1-vulnerability-exceptions.json | sha256sum --check --strict > /dev/null
-          jq -e 'type == "array" and length > 0 and all(.asset | test("^[A-Za-z0-9_.-]+\\.spdx\\.json$")) and all(.sha256 | test("^[a-f0-9]{64}$"))' "$inputs/sboms.json" > /dev/null
-          while IFS=$'\t' read -r asset sha256; do
-            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir "$inputs"
-            printf '%s  %s\n' "$sha256" "$inputs/$asset" | sha256sum --check --strict > /dev/null
-          done < <(jq -r '.[] | [.asset,.sha256] | @tsv' "$inputs/sboms.json")
-      - name: Install the verified scanner and prepare a fresh database
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tool="$RUNNER_TEMP/grype-tool"
-          mkdir "$tool" "$RUNNER_TEMP/grype-home"
-          gh release download v0.121.0 --repo anchore/grype --pattern grype_0.121.0_linux_amd64.tar.gz --dir "$tool"
-          printf '%s  %s\n' 64e07133d3486115de647a66581461dccf5c732748a0a3119077395565f15519 "$tool/grype_0.121.0_linux_amd64.tar.gz" | sha256sum --check --strict > /dev/null
-          tar -xzf "$tool/grype_0.121.0_linux_amd64.tar.gz" -C "$tool" grype
-          env -i PATH=/usr/bin:/bin HOME="$RUNNER_TEMP/grype-home" GRYPE_DB_CACHE_DIR="$RUNNER_TEMP/grype-db" GRYPE_DB_AUTO_UPDATE=false GRYPE_CHECK_FOR_APP_UPDATE=false "$tool/grype" db update > "$RUNNER_TEMP/grype-db-update.log" 2>&1
-      - name: Freshly assess the exact release inputs and reviewed policy
+      - name: Assess the staged release
         id: gate
-        env:
-          TAG: ${{ github.ref_name }}
-          CONTROLLER_REVISION: ${{ needs.security-controller.outputs.revision }}
-          POLICY_SHA256: ${{ needs.security-controller.outputs.policy_sha256 }}
-        run: |
-          set +e
-          cargo run --locked -q -p nemoclaw-build --no-default-features -- release-gate \
-            --inventory "$RUNNER_TEMP/security-inputs/inventory.json" \
-            --sboms "$RUNNER_TEMP/security-inputs/sboms.json" --sbom-directory "$RUNNER_TEMP/security-inputs" \
-            --grype "$RUNNER_TEMP/grype-tool/grype" --database "$RUNNER_TEMP/grype-db" --max-db-age-hours 24 \
-            --release-tag "$TAG" --controller-revision "$CONTROLLER_REVISION" \
-            --exceptions .github/security/v1-vulnerability-exceptions.json --reviewed-policy-sha256 "$POLICY_SHA256" \
-            --output-directory "$RUNNER_TEMP/security-report"
-          result=$?
-          set -e
-          echo "result=$result" >> "$GITHUB_OUTPUT"
-          if test -f "$RUNNER_TEMP/security-report/assessment.json"; then
-            echo 'report=true' >> "$GITHUB_OUTPUT"
-          fi
-          test "$result" -eq 0 || test "$result" -eq 2 || test "$result" -eq 3
+        uses: ./.github/actions/release-assessment
+        with:
+          tag: ${{ github.ref_name }}
+          inventory-sha256: ${{ needs.stage.outputs.inventory_sha256 }}
+          sboms-sha256: ${{ needs.stage.outputs.sboms_sha256 }}
+          policy-sha256: ${{ needs.security-controller.outputs.policy_sha256 }}
+          controller-revision: ${{ needs.security-controller.outputs.revision }}
+          token: ${{ github.token }}
       - name: Report approved findings to code scanning
         env:
           GH_TOKEN: ${{ github.token }}
@@ -455,27 +455,31 @@ jobs:
           ref: ${{ needs.security.outputs.controller_revision }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Recheck the draft, saved inputs, policy, and registry digests
+      - name: Recheck the tag and draft
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
           CANDIDATE_REVISION: ${{ github.sha }}
-          INVENTORY_SHA256: ${{ needs.stage.outputs.inventory_sha256 }}
-          SBOMS_SHA256: ${{ needs.stage.outputs.sboms_sha256 }}
-          POLICY_SHA256: ${{ needs.security.outputs.policy_sha256 }}
         run: |
           test "$(git rev-parse "$TAG^{commit}")" = "$CANDIDATE_REVISION"
           git merge-base --is-ancestor "$CANDIDATE_REVISION" HEAD
           test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+      - name: Reassess immediately before publishing
+        id: publication-gate
+        uses: ./.github/actions/release-assessment
+        with:
+          tag: ${{ github.ref_name }}
+          inventory-sha256: ${{ needs.stage.outputs.inventory_sha256 }}
+          sboms-sha256: ${{ needs.stage.outputs.sboms_sha256 }}
+          policy-sha256: ${{ needs.security.outputs.policy_sha256 }}
+          controller-revision: ${{ needs.security.outputs.controller_revision }}
+          token: ${{ github.token }}
+      - name: Recheck the registry digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
           inputs="$RUNNER_TEMP/security-inputs"
-          mkdir "$inputs"
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern inventory.json --pattern sboms.json --dir "$inputs"
-          printf '%s  %s\n' "$INVENTORY_SHA256" "$inputs/inventory.json" "$SBOMS_SHA256" "$inputs/sboms.json" "$POLICY_SHA256" .github/security/v1-vulnerability-exceptions.json | sha256sum --check --strict > /dev/null
-          jq -e 'type == "array" and length > 0 and all(.asset | test("^[A-Za-z0-9_.-]+\\.spdx\\.json$")) and all(.sha256 | test("^[a-f0-9]{64}$"))' "$inputs/sboms.json" > /dev/null
-          while IFS=$'\t' read -r asset sha256; do
-            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir "$inputs"
-            printf '%s  %s\n' "$sha256" "$inputs/$asset" | sha256sum --check --strict > /dev/null
-          done < <(jq -r '.[] | [.asset,.sha256] | @tsv' "$inputs/sboms.json")
           printf '%s\n' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           echo '[]' > "$RUNNER_TEMP/observed-inventory.json"
           while IFS=$'\t' read -r name repository digest; do
@@ -490,39 +494,6 @@ jobs:
           docker logout ghcr.io
           cargo run --locked -q -p nemoclaw-build --no-default-features -- release-verify-promotion \
             --expected "$inputs/inventory.json" --actual "$RUNNER_TEMP/observed-inventory.json"
-      - name: Install the verified scanner and prepare a fresh database
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tool="$RUNNER_TEMP/grype-tool"
-          mkdir "$tool" "$RUNNER_TEMP/grype-home"
-          gh release download v0.121.0 --repo anchore/grype --pattern grype_0.121.0_linux_amd64.tar.gz --dir "$tool"
-          printf '%s  %s\n' 64e07133d3486115de647a66581461dccf5c732748a0a3119077395565f15519 "$tool/grype_0.121.0_linux_amd64.tar.gz" | sha256sum --check --strict > /dev/null
-          tar -xzf "$tool/grype_0.121.0_linux_amd64.tar.gz" -C "$tool" grype
-          env -i PATH=/usr/bin:/bin HOME="$RUNNER_TEMP/grype-home" GRYPE_DB_CACHE_DIR="$RUNNER_TEMP/grype-db" GRYPE_DB_AUTO_UPDATE=false GRYPE_CHECK_FOR_APP_UPDATE=false "$tool/grype" db update > "$RUNNER_TEMP/grype-db-update.log" 2>&1
-      - name: Reassess immediately before publishing
-        id: publication-gate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-          CONTROLLER_REVISION: ${{ needs.security.outputs.controller_revision }}
-          POLICY_SHA256: ${{ needs.security.outputs.policy_sha256 }}
-        run: |
-          set +e
-          cargo run --locked -q -p nemoclaw-build --no-default-features -- release-gate \
-            --inventory "$RUNNER_TEMP/security-inputs/inventory.json" \
-            --sboms "$RUNNER_TEMP/security-inputs/sboms.json" --sbom-directory "$RUNNER_TEMP/security-inputs" \
-            --grype "$RUNNER_TEMP/grype-tool/grype" --database "$RUNNER_TEMP/grype-db" --max-db-age-hours 24 \
-            --release-tag "$TAG" --controller-revision "$CONTROLLER_REVISION" \
-            --exceptions .github/security/v1-vulnerability-exceptions.json --reviewed-policy-sha256 "$POLICY_SHA256" \
-            --output-directory "$RUNNER_TEMP/security-report"
-          result=$?
-          set -e
-          echo "result=$result" >> "$GITHUB_OUTPUT"
-          if test -f "$RUNNER_TEMP/security-report/assessment.json"; then
-            echo 'report=true' >> "$GITHUB_OUTPUT"
-          fi
-          test "$result" -eq 0 || test "$result" -eq 2 || test "$result" -eq 3
       - name: Retain the final approved assessment evidence
         if: always() && steps.publication-gate.outputs.report == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

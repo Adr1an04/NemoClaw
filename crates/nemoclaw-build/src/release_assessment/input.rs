@@ -11,8 +11,9 @@ use std::{
     path::Path,
 };
 
-const FILE_LIMIT: u64 = 16_000_000;
-const TOTAL_SBOM_LIMIT: usize = 256 << 20;
+// Each vLLM platform's SPDX document is about 65 MB.
+const FILE_LIMIT: u64 = 256 << 20;
+const TOTAL_SBOM_LIMIT: usize = 1 << 30;
 
 fn field<'a>(value: &'a Value, name: &str) -> Result<&'a str, String> {
     value[name]
@@ -139,7 +140,10 @@ fn cpe(locator: &str, version: &str) -> bool {
         && components[offset + 3].replace('\\', "") == version
 }
 
-fn validate_spdx(bytes: &[u8]) -> Result<(), String> {
+/// Returns how many packages lack a versioned PURL or CPE. Syft records some,
+/// such as npm subpath exports and unversioned binaries, in every release;
+/// Grype can't match them, so the report counts them instead of failing.
+fn validate_spdx(bytes: &[u8]) -> Result<usize, String> {
     let value: Value = serde_json::from_slice(bytes).map_err(|_| "SBOM is not valid JSON")?;
     if value["spdxVersion"] != "SPDX-2.3"
         || value["SPDXID"] != "SPDXRef-DOCUMENT"
@@ -175,6 +179,7 @@ fn validate_spdx(bytes: &[u8]) -> Result<(), String> {
         .collect();
     let mut ids = BTreeSet::new();
     let mut libraries = 0;
+    let mut unidentified = 0;
     for package in value["packages"]
         .as_array()
         .ok_or("missing SBOM packages")?
@@ -194,26 +199,26 @@ fn validate_spdx(bytes: &[u8]) -> Result<(), String> {
         if package["primaryPackagePurpose"] == "FILE" && described.contains(id) {
             continue;
         }
-        let version = field(package, "versionInfo")?;
-        if !meaningful(version) {
-            return Err("SBOM package has no usable version".into());
-        }
-        let references = package["externalRefs"]
-            .as_array()
-            .ok_or("SBOM package has no matching identity")?;
-        let has_identity = references.iter().any(|reference| {
-            let Some(locator) = reference["referenceLocator"].as_str() else {
-                return false;
-            };
-            match reference["referenceType"].as_str() {
-                Some("purl") => package_url(locator, version),
-                Some("cpe23Type" | "cpe22Type") => cpe(locator, version),
-                _ => false,
-            }
-        });
-        if !has_identity {
-            return Err("SBOM package lacks a usable versioned PURL or CPE".into());
-        }
+        let version = package["versionInfo"].as_str().filter(|v| meaningful(v));
+        let references = package["externalRefs"].as_array();
+        let has_identity = version
+            .zip(references)
+            .is_some_and(|(version, references)| {
+                references.iter().any(|reference| {
+                    let Some(locator) = reference["referenceLocator"].as_str() else {
+                        return false;
+                    };
+                    match reference["referenceType"].as_str() {
+                        Some("purl") => package_url(locator, version),
+                        Some("cpe23Type" | "cpe22Type") => cpe(locator, version),
+                        _ => false,
+                    }
+                })
+            });
+        let Some(references) = references.filter(|_| has_identity) else {
+            unidentified += 1;
+            continue;
+        };
         if package["primaryPackagePurpose"] != "CONTAINER"
             && !references.iter().any(|v| {
                 v["referenceType"] == "purl"
@@ -228,7 +233,7 @@ fn validate_spdx(bytes: &[u8]) -> Result<(), String> {
     if libraries == 0 {
         return Err("SBOM contains no identifiable software packages".into());
     }
-    Ok(())
+    Ok(unidentified)
 }
 
 pub(super) struct Expected {
@@ -363,7 +368,7 @@ fn load_checked(
         if crate::hex(&Sha256::digest(&sbom)) != sha256 {
             return Err("SBOM checksum differs from its mapping".into());
         }
-        validate_spdx(&sbom)?;
+        let unidentified_packages = validate_spdx(&sbom)?;
         subjects.push(Subject {
             name: subject.name.clone(),
             reference: reference.into(),
@@ -371,6 +376,7 @@ fn load_checked(
             sha256: sha256.into(),
             asset: asset.into(),
             sbom,
+            unidentified_packages,
         });
     }
     Ok(subjects)
@@ -466,7 +472,6 @@ mod tests {
             "created",
             "creators",
             "container_only",
-            "mixed_invalid",
         ] {
             let (dir, inventory, mut mapping) = fixture();
             let path = dir.path().join("hermes-amd64.spdx.json");
@@ -496,10 +501,6 @@ mod tests {
                     let package = sbom["packages"][0].clone();
                     sbom["packages"].as_array_mut().unwrap().push(package);
                 }
-                "mixed_invalid" => sbom["packages"]
-                    .as_array_mut()
-                    .unwrap()
-                    .push(json!({"SPDXID": "SPDXRef-missing", "name": "unknown"})),
                 "created" => sbom["creationInfo"]["created"] = json!("yesterday"),
                 "creators" => sbom["creationInfo"]["creators"] = json!([]),
                 "container_only" => {
@@ -520,6 +521,44 @@ mod tests {
             accepted.is_empty(),
             "accepted unusable inventory: {accepted:?}"
         );
+    }
+
+    fn rewrite(dir: &Path, mapping: &mut Value, change: impl FnOnce(&mut Value)) {
+        let path = dir.join("hermes-amd64.spdx.json");
+        let mut sbom: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        change(&mut sbom);
+        let bytes = serde_json::to_vec(&sbom).unwrap();
+        fs::write(&path, &bytes).unwrap();
+        mapping[0]["sha256"] = json!(crate::hex(&Sha256::digest(&bytes)));
+    }
+
+    #[test]
+    fn packages_without_a_versioned_identity_are_counted_not_rejected() {
+        let (dir, inventory, mut mapping) = fixture();
+        // Shapes Syft 1.55 records in the staged release images.
+        rewrite(dir.path(), &mut mapping, |sbom| {
+            sbom["packages"].as_array_mut().unwrap().extend([
+                json!({"SPDXID": "SPDXRef-subpath", "name": "@google/genai/node", "versionInfo": "UNKNOWN",
+                    "externalRefs": [{"referenceCategory": "PACKAGE-MANAGER", "referenceType": "purl", "referenceLocator": "pkg:npm/%40google/genai%2Fnode"}]}),
+                json!({"SPDXID": "SPDXRef-stdlib", "name": "stdlib", "versionInfo": "go1.26.0",
+                    "externalRefs": [{"referenceCategory": "PACKAGE-MANAGER", "referenceType": "purl", "referenceLocator": "pkg:golang/stdlib@1.26.0"}]}),
+                json!({"SPDXID": "SPDXRef-model", "name": "utils", "versionInfo": "UNKNOWN"}),
+                json!({"SPDXID": "SPDXRef-binary", "name": "cli"}),
+            ]);
+        });
+        let subjects = run(dir.path(), &inventory, &mapping).unwrap();
+        let counts: Vec<_> = subjects.iter().map(|s| s.unidentified_packages).collect();
+        assert_eq!(counts, [4, 0]);
+    }
+
+    #[test]
+    fn release_sized_sboms_are_admissible() {
+        // Each vLLM platform's SPDX document is about 65 MB.
+        let (dir, inventory, mut mapping) = fixture();
+        rewrite(dir.path(), &mut mapping, |sbom| {
+            sbom["comment"] = json!("x".repeat(70_000_000));
+        });
+        assert!(run(dir.path(), &inventory, &mapping).is_ok());
     }
 
     #[test]

@@ -50,6 +50,14 @@ fn fingerprint(subject: &SubjectReport, finding: &Finding) -> String {
     crate::hex(&hash.finalize())
 }
 
+/// Code scanning keeps 5,000 results per run, and a release has thousands of
+/// lower-severity findings; those stay in the assessment document.
+fn reported(finding: &Finding) -> bool {
+    !matches!(
+        finding.severity.as_str(),
+        "Medium" | "Low" | "Negligible" | "Unknown"
+    )
+}
 fn image(subject: &SubjectReport) -> Value {
     json!({"name":subject.name,"reference":subject.reference,"platform":subject.platform,"sbom_asset":subject.sbom_asset,"sbom_sha256":subject.sbom_sha256})
 }
@@ -70,6 +78,7 @@ pub fn document(assessment: &Assessment) -> Value {
             subject
                 .findings
                 .iter()
+                .filter(|finding| reported(finding))
                 .map(|finding| finding.advisory.as_str())
         })
         .collect();
@@ -107,11 +116,9 @@ pub fn document(assessment: &Assessment) -> Value {
                 "properties":{"image":image(subject)}
             }));
         }
-        for finding in &subject.findings {
+        for finding in subject.findings.iter().filter(|finding| reported(finding)) {
             let (level, kind) = match finding.severity.as_str() {
                 "Critical" | "High" => ("error", "fail"),
-                "Medium" => ("warning", "fail"),
-                "Low" | "Negligible" => ("note", "fail"),
                 _ => {
                     notifications.push(json!({
                         "level":"error", "message":{"text":"A finding has unknown or unsupported severity; review is required."},
@@ -210,6 +217,8 @@ mod tests {
                     aliases: vec!["GHSA-aaaa-bbbb-cccc".into()],
                 }],
                 problems: Vec::new(),
+                unidentified_packages: 0,
+                suppressed_matches: 0,
             }],
             problems: Vec::new(),
         }
@@ -318,10 +327,40 @@ mod tests {
     }
 
     #[test]
+    fn only_high_and_critical_findings_become_results() {
+        // rc7 had 15,442 findings; code scanning keeps 5,000 results per run.
+        let mut assessment = assessment();
+        let high = assessment.subjects[0].findings[0].clone();
+        let mut findings: Vec<_> = ["Critical", "Medium", "Low", "Negligible", "Unknown"]
+            .into_iter()
+            .enumerate()
+            .map(|(index, severity)| Finding {
+                advisory: format!("CVE-2026-{index}"),
+                severity: severity.into(),
+                ..high.clone()
+            })
+            .collect();
+        findings.push(high);
+        assessment.subjects[0].findings = findings;
+        let report = document(&assessment);
+        let run = &report["runs"][0];
+        let mut severities: Vec<_> = run["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|result| result["properties"]["severity"].as_str().unwrap())
+            .collect();
+        severities.sort_unstable();
+        assert_eq!(severities, ["Critical", "High"]);
+        assert_eq!(run["tool"]["driver"]["rules"].as_array().unwrap().len(), 2);
+        assert_eq!(run["invocations"][0]["executionSuccessful"], true);
+    }
+
+    #[test]
     fn unusable_severity_retains_the_finding_and_scanner_failure_context() {
         let mut assessment = assessment();
         assessment.status = Status::Incomplete;
-        assessment.subjects[0].findings[0].severity = "Unknown".into();
+        assessment.subjects[0].findings[0].severity = "Unsupported".into();
         assessment.subjects[0]
             .problems
             .push(AssessmentError::Scanner {
@@ -334,7 +373,7 @@ mod tests {
         let result = &run["results"][0];
         assert_eq!(result["kind"], "review");
         assert_eq!(result["level"], "warning");
-        assert_eq!(result["properties"]["severity"], "Unknown");
+        assert_eq!(result["properties"]["severity"], "Unsupported");
         let invocation = &run["invocations"][0];
         assert_eq!(invocation["executionSuccessful"], false);
         let notifications = invocation["toolExecutionNotifications"].as_array().unwrap();

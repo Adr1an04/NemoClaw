@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-//! Candidate release catalogs cross into the trusted controller as data.
+//! Staging lists the agent images the select job evaluated.
 
 #[cfg(unix)]
 #[test]
-fn staging_keeps_candidate_images_when_the_controller_catalog_changes() {
+fn staging_lists_the_selected_catalog_instead_of_its_own_bake_output() {
     use serde_json::{Value, json};
     use std::{fs, os::unix::fs::PermissionsExt, process::Command};
     let workflow: Value =

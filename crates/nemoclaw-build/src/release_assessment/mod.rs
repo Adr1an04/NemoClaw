@@ -22,27 +22,8 @@ pub struct Subject {
     asset: String,
     /// Verified bytes, so later path replacement cannot change scanner input.
     sbom: Vec<u8>,
-}
-
-impl Subject {
-    pub(crate) fn name(&self) -> &str {
-        &self.name
-    }
-    pub(crate) fn reference(&self) -> &str {
-        &self.reference
-    }
-    pub(crate) fn platform(&self) -> &str {
-        &self.platform
-    }
-    pub(crate) fn sha256(&self) -> &str {
-        &self.sha256
-    }
-    pub(crate) fn asset(&self) -> &str {
-        &self.asset
-    }
-    pub(crate) fn sbom(&self) -> &[u8] {
-        &self.sbom
-    }
+    /// Packages without a versioned PURL or CPE, which Grype can't match.
+    unidentified_packages: usize,
 }
 
 #[derive(Debug, Clone, Serialize, thiserror::Error)]
@@ -121,6 +102,15 @@ pub struct Finding {
     pub aliases: Vec<String>,
 }
 
+impl Finding {
+    /// A High or Critical finding blocks publication once a fix is published.
+    /// Without one there is nothing to update, so the report keeps it and a
+    /// later assessment blocks when the fix appears.
+    pub fn blocks(&self) -> bool {
+        matches!(self.severity.as_str(), "High" | "Critical") && !self.fixed_versions.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct SubjectReport {
     pub name: String,
@@ -130,6 +120,10 @@ pub struct SubjectReport {
     pub sbom_asset: String,
     pub findings: Vec<Finding>,
     pub problems: Vec<AssessmentError>,
+    /// Packages without a versioned PURL or CPE, which Grype can't match.
+    pub unidentified_packages: usize,
+    /// Matches Grype's built-in rules ignore; the assessment configures none.
+    pub suppressed_matches: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]

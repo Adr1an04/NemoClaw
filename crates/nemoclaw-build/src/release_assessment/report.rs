@@ -157,6 +157,8 @@ mod tests {
                     reason: "second result could not be verified".into(),
                     exit_code: Some(1),
                 }],
+                unidentified_packages: 0,
+                suppressed_matches: 0,
             }],
             problems: vec![AssessmentError::Input {
                 reason: "one platform assessment failed".into(),

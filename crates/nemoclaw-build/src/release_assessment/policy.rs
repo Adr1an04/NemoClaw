@@ -258,9 +258,9 @@ pub fn evaluate(
         for finding in &subject.findings {
             incomplete |= !matches!(
                 finding.severity.as_str(),
-                "Critical" | "High" | "Medium" | "Low" | "Negligible"
+                "Critical" | "High" | "Medium" | "Low" | "Negligible" | "Unknown"
             );
-            if matches!(finding.severity.as_str(), "High" | "Critical") {
+            if finding.blocks() {
                 if let Some(exception) = policy
                     .exceptions
                     .iter()
@@ -332,6 +332,8 @@ mod tests {
                     aliases: Vec::new(),
                 }],
                 problems: Vec::new(),
+                unidentified_packages: 0,
+                suppressed_matches: 0,
             }],
             problems: Vec::new(),
         }
@@ -377,6 +379,22 @@ mod tests {
         assert_eq!(evaluated.blocking_findings, 1);
         assert!(!evaluated.publication_authorized);
         assert_eq!(assessment.subjects[0].findings.len(), 1);
+    }
+
+    #[test]
+    fn unfixed_high_and_unknown_severity_findings_are_reported_without_blocking() {
+        for (severity, fixed) in [("High", false), ("Critical", false), ("Unknown", true)] {
+            let mut assessment = assessment();
+            assessment.status = Status::Passed;
+            let finding = &mut assessment.subjects[0].findings[0];
+            finding.severity = severity.into();
+            if !fixed {
+                finding.fixed_versions.clear();
+            }
+            let evaluated = run(&assessment, &json!({"schema_version":1,"exceptions":[]})).unwrap();
+            assert_eq!(evaluated.status, Status::Passed, "{severity}");
+            assert_eq!(evaluated.blocking_findings, 0, "{severity}");
+        }
     }
 
     #[test]
@@ -456,7 +474,7 @@ mod tests {
                 5 => {
                     assessment.subjects[0].findings =
                         self::assessment().subjects.remove(0).findings;
-                    assessment.subjects[0].findings[0].severity = "Unknown".into();
+                    assessment.subjects[0].findings[0].severity = "Unsupported".into();
                 }
                 _ => assessment.subjects.clear(),
             }

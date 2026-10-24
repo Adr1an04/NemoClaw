@@ -125,6 +125,8 @@ pub fn assess(subjects: &[Subject], options: &ScanOptions) -> Result<Assessment,
             sbom_asset: subject.asset.clone(),
             findings: Vec::new(),
             problems: Vec::new(),
+            unidentified_packages: subject.unidentified_packages,
+            suppressed_matches: 0,
         };
         let result = fs::write(&path, &subject.sbom)
             .map_err(|_| {
@@ -404,20 +406,10 @@ fn evaluate_document(report: &mut SubjectReport, document: &Value) -> Status {
             None,
         ));
     }
-    if ignored
-        .and_then(Value::as_array)
-        .is_some_and(|v| !v.is_empty())
-    {
-        report.problems.push(scanner_error(
-            ScanOperation::Scan,
-            "Grype unexpectedly suppressed matches; review is required",
-            None,
-        ));
-    }
-    for entry in matches
-        .iter()
-        .chain(ignored.and_then(Value::as_array).into_iter().flatten())
-    {
+    // The configuration ignores nothing, so these come from the pinned Grype's
+    // built-in rules, such as kernel CVEs matched indirectly to kernel headers.
+    report.suppressed_matches = ignored.and_then(Value::as_array).map_or(0, Vec::len);
+    for entry in matches {
         let vulnerability = &entry["vulnerability"];
         let artifact = &entry["artifact"];
         let (Some(advisory), Some(package), Some(version)) = (
@@ -434,8 +426,7 @@ fn evaluate_document(report: &mut SubjectReport, document: &Value) -> Status {
         };
         let severity = text(vulnerability, "severity").unwrap_or("Unknown");
         match severity {
-            "Critical" | "High" => blocked = true,
-            "Medium" | "Low" | "Negligible" => {}
+            "Critical" | "High" | "Medium" | "Low" | "Negligible" | "Unknown" => {}
             _ => report.problems.push(scanner_error(
                 ScanOperation::Scan,
                 "A finding has unknown or unsupported severity; review is required",
@@ -466,7 +457,7 @@ fn evaluate_document(report: &mut SubjectReport, document: &Value) -> Status {
             .filter(|v| v["cvss"].as_array().is_some_and(|a| !a.is_empty()))
             .map(|v| json!({"advisory":v["id"], "source":v["dataSource"], "cvss":v["cvss"]}))
             .collect();
-        report.findings.push(Finding {
+        let finding = Finding {
             advisory: advisory.into(),
             package: package.into(),
             version: version.into(),
@@ -476,7 +467,9 @@ fn evaluate_document(report: &mut SubjectReport, document: &Value) -> Status {
             fixed_versions,
             aliases,
             ratings,
-        });
+        };
+        blocked |= finding.blocks();
+        report.findings.push(finding);
     }
     if !report.problems.is_empty() {
         Status::Incomplete
@@ -501,6 +494,8 @@ mod tests {
             sbom_asset: "hermes-amd64.spdx.json".into(),
             findings: Vec::new(),
             problems: Vec::new(),
+            unidentified_packages: 0,
+            suppressed_matches: 0,
         }
     }
 
@@ -530,20 +525,43 @@ mod tests {
     }
 
     #[test]
-    fn unexpected_suppression_is_incomplete_and_keeps_the_hidden_finding() {
+    fn high_findings_without_a_published_fix_are_reported_without_blocking() {
+        let mut report = report();
+        let mut output = document("Critical");
+        output["matches"][0]["vulnerability"]["fix"] = json!({"versions":[], "state":"not-fixed"});
+        assert_eq!(evaluate_document(&mut report, &output), Status::Passed);
+        assert_eq!(report.findings.len(), 1);
+        assert!(report.findings[0].fixed_versions.is_empty());
+    }
+
+    #[test]
+    fn grype_built_in_suppressions_are_counted_without_becoming_findings() {
+        // vLLM's kernel headers match kernel CVEs indirectly; Grype ignores those.
         let mut report = report();
         let mut output = document("Critical");
         output["ignoredMatches"] = output["matches"].take();
         output["matches"] = json!([]);
-        assert_eq!(evaluate_document(&mut report, &output), Status::Incomplete);
-        assert_eq!(report.findings.len(), 1);
-        assert_eq!(report.findings[0].severity, "Critical");
+        assert_eq!(evaluate_document(&mut report, &output), Status::Passed);
+        assert!(report.findings.is_empty());
+        assert!(report.problems.is_empty());
+        assert_eq!(report.suppressed_matches, 1);
     }
 
     #[test]
-    fn unknown_or_malformed_matches_prevent_a_pass_without_hiding_known_findings() {
+    fn unknown_severity_is_reported_without_preventing_a_result() {
+        let mut report = report();
+        assert_eq!(
+            evaluate_document(&mut report, &document("Unknown")),
+            Status::Passed
+        );
+        assert_eq!(report.findings[0].severity, "Unknown");
+        assert!(report.problems.is_empty());
+    }
+
+    #[test]
+    fn unsupported_or_malformed_matches_prevent_a_pass_without_hiding_known_findings() {
         for extra in [
-            document("Unknown")["matches"][0].clone(),
+            document("Unsupported")["matches"][0].clone(),
             json!({"artifact":{}}),
         ] {
             let mut report = report();

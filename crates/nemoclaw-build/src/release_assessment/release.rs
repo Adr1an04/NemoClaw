@@ -387,6 +387,7 @@ mod tests {
                 asset: format!("hermes-{architecture}.spdx.json"),
                 sha256: sha256.clone(),
                 sbom: b"verified SBOM snapshot".to_vec(),
+                unidentified_packages: 0,
             });
             reports.push(SubjectReport {
                 name: "hermes".into(),
@@ -396,6 +397,8 @@ mod tests {
                 sbom_sha256: sha256.clone(),
                 findings: vec![],
                 problems: vec![],
+                unidentified_packages: 0,
+                suppressed_matches: 0,
             });
             manifests.push(
                 json!({"digest":digest,"platform":{"os":"linux","architecture":architecture}}),
@@ -513,7 +516,7 @@ mod tests {
     }
 
     #[test]
-    fn high_findings_without_a_reviewed_exception_block_release_evidence() {
+    fn fixable_high_findings_without_a_reviewed_exception_block_release_evidence() {
         let (subjects, mut assessment, inventory, mapping) = fixture();
         assessment.status = Status::Blocked;
         assessment.subjects[0].findings.push(Finding {
@@ -524,7 +527,7 @@ mod tests {
             severity: "High".into(),
             severity_source: None,
             ratings: vec![],
-            fixed_versions: vec![],
+            fixed_versions: vec!["1.1".into()],
             aliases: vec![],
         });
         let result = evidence(&subjects, &assessment, &inventory, &mapping).unwrap();
@@ -660,22 +663,46 @@ mod tests {
         let workflow: Value =
             serde_saphyr::from_str(include_str!("../../../../.github/workflows/release.yml"))
                 .unwrap();
-        for (job, gate_name, pass_name) in [
+        let action: Value = serde_saphyr::from_str(include_str!(
+            "../../../../.github/actions/release-assessment/action.yml"
+        ))
+        .unwrap();
+        let gate = action["runs"]["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["id"] == "gate")
+            .unwrap()["run"]
+            .as_str()
+            .unwrap();
+        // Release candidates report a blocked result without failing.
+        for (job, id, pass_name, passing) in [
             (
                 "security",
-                "Freshly assess the exact release inputs and reviewed policy",
+                "gate",
                 "Require a passing release policy",
+                &[0][..],
             ),
             (
                 "publish-security-reviewed",
-                "Reassess immediately before publishing",
+                "publication-gate",
                 "Require a passing final release policy",
+                &[0],
+            ),
+            (
+                "candidate-security",
+                "gate",
+                "Report the result without disclosing findings",
+                &[0, 2],
             ),
         ] {
             let steps = workflow["jobs"][job]["steps"].as_array().unwrap();
-            let gate = steps.iter().find(|v| v["name"] == gate_name).unwrap()["run"]
-                .as_str()
-                .unwrap();
+            assert!(
+                steps
+                    .iter()
+                    .any(|v| v["id"] == id && v["uses"] == "./.github/actions/release-assessment"),
+                "{job} must assess through the shared action"
+            );
             let pass = steps.iter().find(|v| v["name"] == pass_name).unwrap()["run"]
                 .as_str()
                 .unwrap();
@@ -717,12 +744,13 @@ mod tests {
                     .args(["-euo", "pipefail", "-c", pass])
                     .env_clear()
                     .env("RESULT", result.to_string())
+                    .env("GITHUB_STEP_SUMMARY", root.path().join("summary"))
                     .output()
                     .unwrap();
                 assert_eq!(
                     pass.status.success(),
-                    result == 0,
-                    "{job}: exit {result} cannot bypass the final gate"
+                    passing.contains(&result),
+                    "{job}: exit {result}"
                 );
             }
         }
