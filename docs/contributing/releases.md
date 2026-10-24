@@ -66,9 +66,10 @@ If it ran while release review was pending, rerun it after controlled publicatio
 
 ## SBOM Assets
 
-Each image is scanned where it is built, with Syft 1.55.0: the image workflow scans each agent and proxy image it pushes on `v1`, and staging's runtime jobs scan the vLLM and Ollama images they build.
-The SPDX document is kept in `v1-ci` as `sbom-DIGEST`, named by the platform manifest it describes, so an unchanged image is never scanned again.
-Staging copies each release platform's document from there, and scans from the registry only an image that has none.
+Each image is scanned by the job that pushes it, with Syft 1.55.0: the image workflow scans each agent and proxy image it pushes on `v1`, and staging's runtime jobs scan the vLLM and Ollama images they build.
+Each scan reads the pushed platform manifest from the registry, so the SPDX document's subject is that manifest's digest; `v1-ci` keeps the document as `sbom-DIGEST`, and an unchanged image is never scanned again.
+Staging copies each release platform's document from there.
+It scans an image only when no recorded document names its digest, and records the result.
 Each platform gets a digest-named SPDX 2.3 JSON asset; `sboms.json` maps each asset to its image reference, platform, and SHA-256 checksum.
 Staging also retains `inventory.json` with each image's index digest and platform descriptors so assessment and publication can verify the same subjects.
 The existing Kubernetes metadata bundles remain separate assets.
